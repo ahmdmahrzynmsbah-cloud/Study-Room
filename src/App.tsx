@@ -147,68 +147,69 @@ export default function App() {
 
   // --- INITIALIZATION ---
   useEffect(() => {
-    // initialize localStorage with seed records if empty
-    initializeDB();
-
     import('./lib/firebase').then(({ db, auth }) => {
       import('firebase/auth').then(({ signInAnonymously }) => {
-         signInAnonymously(auth).catch(console.error);
-      });
-      import('firebase/firestore').then(({ doc, onSnapshot }) => {
-        
-        // Listen to Users
-        onSnapshot(doc(db, 'app_data', 'sr_users'), (docSnap) => {
-          if (docSnap.exists() && docSnap.data().items) {
-             const data = docSnap.data().items;
-             localStorage.setItem('sr_users', JSON.stringify(data));
-             setUsers(data);
-          }
-        });
+         signInAnonymously(auth).then(() => {
+           // Now authenticated, initialize DB from firestore or seed it
+           initializeDB().then(() => {
+             import('firebase/firestore').then(({ doc, onSnapshot }) => {
+               
+               // Listen to Users
+               onSnapshot(doc(db, 'app_data', 'sr_users'), (docSnap) => {
+                 if (docSnap.exists() && docSnap.data().items) {
+                    const data = docSnap.data().items;
+                    localStorage.setItem('sr_users', JSON.stringify(data));
+                    setUsers(data);
+                 }
+               }, (err) => console.error("users listener error", err));
 
-        // Listen to Groups
-        onSnapshot(doc(db, 'app_data', 'sr_groups'), (docSnap) => {
-          if (docSnap.exists() && docSnap.data().items) {
-             const data = docSnap.data().items;
-             localStorage.setItem('sr_groups', JSON.stringify(data));
-             setGroups(data);
-          }
-        });
+               // Listen to Groups
+               onSnapshot(doc(db, 'app_data', 'sr_groups'), (docSnap) => {
+                 if (docSnap.exists() && docSnap.data().items) {
+                    const data = docSnap.data().items;
+                    localStorage.setItem('sr_groups', JSON.stringify(data));
+                    setGroups(data);
+                 }
+               }, (err) => console.error("groups listener error", err));
 
-        // Listen to Challenges
-        onSnapshot(doc(db, 'app_data', 'sr_challenges'), (docSnap) => {
-          if (docSnap.exists() && docSnap.data().items) {
-             const data = docSnap.data().items;
-             localStorage.setItem('sr_challenges', JSON.stringify(data));
-             setChallenges(data);
-          }
-        });
+               // Listen to Challenges
+               onSnapshot(doc(db, 'app_data', 'sr_challenges'), (docSnap) => {
+                 if (docSnap.exists() && docSnap.data().items) {
+                    const data = docSnap.data().items;
+                    localStorage.setItem('sr_challenges', JSON.stringify(data));
+                    setChallenges(data);
+                 }
+               }, (err) => console.error("challenges listener error", err));
 
-        // Listen to Settings
-        onSnapshot(doc(db, 'app_data', 'sr_settings'), (docSnap) => {
-          if (docSnap.exists() && docSnap.data().items) {
-             const data = docSnap.data().items;
-             localStorage.setItem('sr_settings', JSON.stringify(data));
-             setSettings(data);
-          }
-        });
+               // Listen to Settings
+               onSnapshot(doc(db, 'app_data', 'sr_settings'), (docSnap) => {
+                 if (docSnap.exists() && docSnap.data().items) {
+                    const data = docSnap.data().items;
+                    localStorage.setItem('sr_settings', JSON.stringify(data));
+                    setSettings(data);
+                 }
+               }, (err) => console.error("settings listener error", err));
 
-        // Listen to Logs
-        onSnapshot(doc(db, 'app_data', 'sr_log'), (docSnap) => {
-          if (docSnap.exists() && docSnap.data().items) {
-             const data = docSnap.data().items;
-             localStorage.setItem('sr_log', JSON.stringify(data));
-             setLogs(data);
-          }
-        });
+               // Listen to Logs
+               onSnapshot(doc(db, 'app_data', 'sr_log'), (docSnap) => {
+                 if (docSnap.exists() && docSnap.data().items) {
+                    const data = docSnap.data().items;
+                    localStorage.setItem('sr_log', JSON.stringify(data));
+                    setLogs(data);
+                 }
+               }, (err) => console.error("logs listener error", err));
 
-        // Listen to Transactions
-        onSnapshot(doc(db, 'app_data', 'sr_transactions'), (docSnap) => {
-          if (docSnap.exists() && docSnap.data().items) {
-             const data = docSnap.data().items;
-             localStorage.setItem('sr_transactions', JSON.stringify(data));
-             setTransactions(data);
-          }
-        });
+               // Listen to Transactions
+               onSnapshot(doc(db, 'app_data', 'sr_transactions'), (docSnap) => {
+                 if (docSnap.exists() && docSnap.data().items) {
+                    const data = docSnap.data().items;
+                    localStorage.setItem('sr_transactions', JSON.stringify(data));
+                    setTransactions(data);
+                 }
+               }, (err) => console.error("transactions listener error", err));
+             });
+           });
+         }).catch(console.error);
       });
     });
 
@@ -253,96 +254,8 @@ export default function App() {
       maintenanceMode: false,
       pointsToEgpRate: 25, // 25 points = 1 EGP
       egpToPointsRate: 25, // 1 EGP = 25 points
-      subscriptionPlans: [
-        {
-          id: "free",
-          name: "عضوية مجانية",
-          priceEgp: 0,
-          bonusPoints: 0,
-          durationDays: 0,
-          features: [
-            "استخدام جميع ميزات التطبيق الأساسية",
-            "انضمام للتحديات ومجموعات الدراسة",
-          ],
-          color: "slate",
-        },
-        {
-          id: "silver",
-          name: "عضوية فضية",
-          priceEgp: 50,
-          bonusPoints: 2000,
-          durationDays: 30,
-          features: [
-            "جميع ميزات العضوية المجانية",
-            "أولوية في دعم العملاء",
-            "مكافآت نقاط إضافية 10%",
-          ],
-          color: "blue",
-        },
-        {
-          id: "gold",
-          name: "عضوية ذهبية",
-          priceEgp: 100,
-          bonusPoints: 5000,
-          durationDays: 90,
-          features: [
-            "جميع ميزات العضوية الفضية",
-            "لوجو مميز للحساب",
-            "مكافآت نقاط إضافية 25%",
-          ],
-          color: "amber",
-        },
-      ],
     });
 
-    // Force update subscription plans with newly customized awesome features!
-    loadedSettings.subscriptionPlans = [
-      {
-        id: "free",
-        name: "عضوية مجانية",
-        priceEgp: 0,
-        bonusPoints: 0,
-        durationDays: 0,
-        features: [
-          "استخدام جميع ميزات التطبيق الأساسية",
-          "انضمام للتحديات ومجموعات الدراسة",
-        ],
-        color: "slate",
-      },
-      {
-        id: "silver",
-        name: "عضوية فضية (لمدة شهر)",
-        priceEgp: 50,
-        bonusPoints: 2000,
-        durationDays: 30,
-        features: [
-          "صالحة لمدة شهر كامل",
-          "جميع ميزات العضوية المجانية",
-          "أولوية في دعم العملاء والطلبات",
-          "مكافآت نقاط إضافية +10% من جميع الأنشطة والمهام",
-          "دخول باقة الافتارات المميزة الأساسية",
-        ],
-        color: "blue",
-      },
-      {
-        id: "gold",
-        name: "العضوية الذهبية الملكية (3 شهور) 👑",
-        priceEgp: 100,
-        bonusPoints: 5000,
-        durationDays: 90,
-        features: [
-          "👑 صالحة لـ 3 أشهر كاملة من التميز الملكي المطلق",
-          "✨ الإطار الذهبي المتوهج والتاج الملكي حول اسمك وصورتك أينما تظهر!",
-          "🔥 لقب 'المتفوق الذهبي 👑' موثق أمام الجميع وفي لوحة الصدارة",
-          "💎 باقة الافتارات ثلاثية الأبعاد الفاخرة VIP (تصاميم حصرية وفخمة للغاية)",
-          "🚀 مكافآت نقاط إضافية جبارة +30% على كل جلسات المذاكرة والمهام",
-          "💰 أولوية فائقة للمحفظة: سداد، سحب وتحويل فوري ومعالجة خلال ساعة واحدة",
-          "🎵 فتح ثيمات الغرف الحصرية ومقاطع الموسيقى الهادئة المتميزة للتفوق",
-        ],
-        color: "amber",
-      },
-    ];
-    saveDB("sr_settings", loadedSettings);
     const loadedSession = getDB<Session | null>("sr_sessions", null);
     const loadedLogs = getDB<LogEntry[]>("sr_log", []);
     const loadedTransactions = getDB<TransactionRequest[]>(
