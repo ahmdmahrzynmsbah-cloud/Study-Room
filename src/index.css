@@ -1,0 +1,174 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Cairo", ui-sans-serif, system-ui, sans-serif;
+  --color-primary: #2563eb;
+  --color-primary-dark: #1d4ed8;
+  --color-secondary: #0ea5e9;
+  --color-success: #10b981;
+  --color-warning: #f59e0b;
+  --color-danger: #ef4444;
+  --color-bg: #f8fafc;
+  --color-bg-card: #ffffff;
+  --color-bg-elevated: #f1f5f9;
+  --color-text: #1e293b;
+  --color-text-muted: #64748b;
+}
+
+@layer base {
+  html {
+    background-color: #f8fafc;
+  }
+
+  html.dark {
+    /* Enhanced dark mode filter for clearer colors and less washout */
+    filter: invert(0.92) hue-rotate(180deg) brightness(1.08) contrast(1.05);
+  }
+
+  /* Any element that shouldn't be color inverted needs double inversion to cancel out */
+  html.dark img,
+  html.dark video,
+  html.dark div[style*="background-image"],
+  html.dark .no-invert,
+  html.dark .vip-shimmer {
+    filter: invert(0.92) hue-rotate(180deg) brightness(1.08) contrast(1.05);
+  }
+
+  /* View Transition API Animations */
+  ::view-transition-old(root) {
+    animation: 0.5s cubic-bezier(0.4, 0, 0.2, 1) both fade-out;
+  }
+
+  ::view-transition-new(root) {
+    animation: 0.5s cubic-bezier(0.4, 0, 0.2, 1) both fade-in;
+  }
+
+  @keyframes fade-out {
+    to {
+      opacity: 0;
+    }
+  }
+
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+  }
+
+  body {
+    color: #1e293b;
+    font-family: "Cairo", sans-serif;
+    scrollbar-width: thin;
+    scrollbar-color: #cbd5e1 #f1f5f9;
+    min-height: 100vh;
+  }
+}
+
+/* Custom scrollbar for webkit browsers */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Pulse animation for timer */
+@keyframes timerPulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.02);
+    opacity: 0.9;
+    color: #ef4444;
+  }
+}
+
+.animate-timer-pulse {
+  animation: timerPulse 0.9s infinite ease-in-out;
+}
+
+/* Custom modal fade in */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Typography theme custom utilities */
+.timer-glow {
+  text-shadow: 0 0 15px rgba(37, 99, 235, 0.1);
+}
+
+.btn-grad {
+  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+}
+
+.card-hover {
+  transition:
+    transform 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 0.2s ease,
+    border-color 0.2s ease;
+}
+
+.card-hover:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.05);
+}
+
+/* VIP Badge Shimmer Effect */
+.vip-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+
+.vip-shimmer::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 50%;
+  height: 100%;
+  background: linear-gradient(
+    to right,
+    transparent,
+    rgba(255, 255, 255, 0.7),
+    transparent
+  );
+  transform: skewX(-20deg);
+  animation: shimmer 5s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  0% {
+    left: -100%;
+  }
+  50% {
+    left: 150%;
+  }
+  100% {
+    left: 150%;
+  }
+}

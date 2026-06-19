@@ -1,0 +1,6 @@
+{
+  "name": "StudyRoom",
+  "description": "منصة تحديات الدراسات التنافسية بمجموعات الأصدقاء، مراقبة الوقت المباشر، إثباتات الدراسة، وتصنيف لوحة الصدارة.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
