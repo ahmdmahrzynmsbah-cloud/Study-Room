@@ -1,0 +1,94 @@
+{
+  "collections": {
+    "users": {
+        "description": "User profiles and aggregate stats",
+        "docs": {
+        "id": "User UID from Firebase Auth",
+        "data": {
+            "name": "string",
+            "email": "string",
+            "avatar": "string",
+            "role": "string ('admin' or 'user')",
+            "phone": "string",
+            "parentPhone": "string",
+            "governorate": "string",
+            "educationalStage": "string",
+            "educationalLevel": "string",
+            "points": "number",
+            "walletBalance": "number",
+            "totalStudyMinutes": "number",
+            "challengesJoined": "number",
+            "challengesCompleted": "number",
+            "createdAt": "timestamp",
+            "isActive": "boolean",
+            "customPunishments": "array"
+        }
+        }
+    },
+    "groups": {
+        "description": "Study groups",
+        "docs": {
+        "id": "Auto-generated",
+        "data": {
+            "name": "string",
+            "description": "string",
+            "createdBy": "string (User ID)",
+            "members": "array (List of User IDs)",
+            "createdAt": "timestamp",
+            "isActive": "boolean"
+        }
+        }
+    },
+    "challenges": {
+        "description": "Study challenges in groups",
+        "docs": {
+        "id": "Auto-generated",
+        "data": {
+            "title": "string",
+            "subject": "string",
+            "groupId": "string",
+            "createdBy": "string (User ID)",
+            "durationMinutes": "number",
+            "pageCount": "number",
+            "startTime": "timestamp",
+            "endTime": "timestamp",
+            "status": "string",
+            "participants": "array (List of User IDs)",
+            "submissions": "array",
+            "pointsReward": "number",
+            "pointsPenalty": "number",
+            "createdAt": "timestamp"
+        }
+        }
+    },
+    "settings": {
+        "description": "Global app settings",
+        "docs": {
+        "id": "global",
+        "data": {
+            "appName": "string",
+            "defaultReward": "number",
+            "defaultPenalty": "number",
+            "allowSelfRating": "boolean",
+            "maxGroupSize": "number",
+            "maintenanceMode": "boolean",
+            "pointsToEgpRate": "number",
+            "egpToPointsRate": "number"
+        }
+        }
+    },
+    "log": {
+        "description": "System activity logs",
+        "docs": {
+        "id": "Auto-generated",
+        "data": {
+            "timestamp": "timestamp",
+            "userId": "string",
+            "userName": "string",
+            "action": "string",
+            "details": "string"
+        }
+        }
+    }
+  }
+}

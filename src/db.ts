@@ -4,6 +4,8 @@
  */
 
 import { User, Group, Challenge, AppSettings, LogEntry, Session } from './types';
+import { db } from './lib/firebase';
+import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
 
 export const uuid = (): string => {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -12,7 +14,7 @@ export const uuid = (): string => {
   return 'sr_' + Math.random().toString(36).substring(2, 11) + '_' + Date.now().toString(36);
 };
 
-// Initial Seed Users
+// Seed definitions ...
 const seedUsers: User[] = [
   {
     id: 'user-admin',
@@ -28,161 +30,11 @@ const seedUsers: User[] = [
     challengesCompleted: 5,
     createdAt: Date.now() - 10 * 24 * 60 * 60 * 1000,
     isActive: true
-  },
-  {
-    id: 'user-ahmed',
-    name: 'أحمد',
-    email: 'ahmed@test.com',
-    password: '1234',
-    avatar: 'https://api.dicebear.com/7.x/notionists/svg?seed=Felix&backgroundColor=e2e8f0',
-    role: 'user',
-    points: 340,
-    walletBalance: 0,
-    totalStudyMinutes: 180,
-    challengesJoined: 4,
-    challengesCompleted: 3,
-    createdAt: Date.now() - 8 * 24 * 60 * 60 * 1000,
-    isActive: true
-  },
-  {
-    id: 'user-sara',
-    name: 'سارة',
-    email: 'sara@test.com',
-    password: '1234',
-    avatar: 'https://api.dicebear.com/7.x/lorelei/svg?seed=Aria&backgroundColor=e2e8f0',
-    role: 'user',
-    points: 520,
-    walletBalance: 0,
-    totalStudyMinutes: 240,
-    challengesJoined: 6,
-    challengesCompleted: 5,
-    createdAt: Date.now() - 7 * 24 * 60 * 60 * 1000,
-    isActive: true
-  },
-  {
-    id: 'user-omar',
-    name: 'عمر',
-    email: 'omar@test.com',
-    password: '1234',
-    avatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=Liam&backgroundColor=e2e8f0',
-    role: 'user',
-    points: 210,
-    walletBalance: 0,
-    totalStudyMinutes: 120,
-    challengesJoined: 3,
-    challengesCompleted: 2,
-    createdAt: Date.now() - 6 * 24 * 60 * 60 * 1000,
-    isActive: true
-  },
-  {
-    id: 'user-nour',
-    name: 'نور',
-    email: 'nour@test.com',
-    password: '1234',
-    avatar: 'https://api.dicebear.com/7.x/micah/svg?seed=Mia&backgroundColor=e2e8f0',
-    role: 'user',
-    points: 450,
-    walletBalance: 0,
-    totalStudyMinutes: 210,
-    challengesJoined: 5,
-    challengesCompleted: 4,
-    createdAt: Date.now() - 5 * 24 * 60 * 60 * 1000,
-    isActive: true
   }
 ];
 
-// Initial Seed Groups
-const seedGroups: Group[] = [
-  {
-    id: 'group-physics',
-    name: 'مجموعة الفيزياء',
-    description: 'مجموعة مخصصة لمذاكرة الفيزياء وحل المسائل والاستعداد للامتحانات معاً.',
-    createdBy: 'user-sara',
-    members: ['user-ahmed', 'user-sara', 'user-omar'],
-    createdAt: Date.now() - 4 * 24 * 60 * 60 * 1000,
-    isActive: true
-  },
-  {
-    id: 'group-math',
-    name: 'أبطال الرياضيات',
-    description: 'مكان لتحديات التفاضل والتكامل، الجبر والهندسة والتشجيع المتبادل.',
-    createdBy: 'user-nour',
-    members: ['user-sara', 'user-nour', 'user-ahmed'],
-    createdAt: Date.now() - 3 * 24 * 60 * 60 * 1000,
-    isActive: true
-  }
-];
-
-// Initial Seed Challenges
-const seedChallenges: Challenge[] = [
-  {
-    id: 'challenge-1',
-    title: 'مراجعة الفصل الخامس',
-    subject: 'الفيزياء الحديثة',
-    groupId: 'group-physics',
-    createdBy: 'user-sara',
-    durationMinutes: 60,
-    pageCount: 20,
-    startTime: Date.now() - 2 * 24 * 60 * 60 * 1000 - 60 * 60 * 1000,
-    endTime: Date.now() - 2 * 24 * 60 * 60 * 1000,
-    status: 'completed',
-    participants: ['user-ahmed', 'user-sara', 'user-omar'],
-    submissions: [
-      {
-        userId: 'user-sara',
-        submittedAt: Date.now() - 2 * 24 * 60 * 60 * 1000 - 5 * 60 * 1000,
-        proofText: 'أتممت دراسة الفصل الخامس بالكامل ولخصت القوانين الخاصة بالظاهرة الكهروضوئية.',
-        ratings: [
-          { fromUserId: 'user-ahmed', score: 5 },
-          { fromUserId: 'user-omar', score: 4 }
-        ],
-        averageRating: 4.5
-      },
-      {
-        userId: 'user-ahmed',
-        submittedAt: Date.now() - 2 * 24 * 60 * 60 * 1000 - 2 * 60 * 1000,
-        proofText: 'قرأت 18 صفحة وكتبت ملاحظات شاملة في دفتري الخاص.',
-        ratings: [
-          { fromUserId: 'user-sara', score: 4 },
-          { fromUserId: 'user-omar', score: 4 }
-        ],
-        averageRating: 4
-      },
-      {
-        userId: 'user-omar',
-        submittedAt: Date.now() - 2 * 24 * 60 * 60 * 1000 - 3 * 60 * 1000,
-        proofText: 'أكملت حل 10 تمارين على الفصل بنجاح.',
-        ratings: [
-          { fromUserId: 'user-sara', score: 4 },
-          { fromUserId: 'user-ahmed', score: 5 }
-        ],
-        averageRating: 4.5
-      }
-    ],
-    pointsReward: 50,
-    pointsPenalty: 20,
-    createdAt: Date.now() - 2.5 * 24 * 60 * 60 * 1000
-  },
-  {
-    id: 'challenge-2',
-    title: 'حل مسائل التفاضل',
-    subject: 'الرياضيات التطبيقية',
-    groupId: 'group-math',
-    createdBy: 'user-sara',
-    durationMinutes: 45,
-    pageCount: 15,
-    // active from 15 mins ago to 30 mins from now
-    startTime: Date.now() - 15 * 60 * 1000,
-    endTime: Date.now() + 30 * 60 * 1000,
-    status: 'active',
-    participants: ['user-sara', 'user-nour', 'user-ahmed'],
-    submissions: [],
-    pointsReward: 50,
-    pointsPenalty: 20,
-    createdAt: Date.now() - 1 * 24 * 60 * 60 * 1000
-  }
-];
-
+const seedGroups: Group[] = [];
+const seedChallenges: Challenge[] = [];
 const defaultSettings: AppSettings = {
   appName: 'StudyRoom',
   defaultReward: 50,
@@ -193,24 +45,12 @@ const defaultSettings: AppSettings = {
   pointsToEgpRate: 100,
   egpToPointsRate: 100,
 };
+const initialLog: LogEntry[] = [];
 
-const initialLog: LogEntry[] = [
-  {
-    id: 'log-1',
-    timestamp: Date.now() - 5 * 24 * 60 * 60 * 1000,
-    userId: 'user-admin',
-    userName: 'المدير',
-    action: 'تهيئة النظام',
-    details: 'تم إطلاق نظام StudyRoom وتهيئة البيانات الأولية.'
-  }
-];
-
+// Fallback logic for localStorage
 export const getDB = <T>(key: string, defaultVal: T): T => {
   const data = localStorage.getItem(key);
-  if (!data) {
-    localStorage.setItem(key, JSON.stringify(defaultVal));
-    return defaultVal;
-  }
+  if (!data) return defaultVal;
   try {
     return JSON.parse(data) as T;
   } catch {
@@ -220,23 +60,35 @@ export const getDB = <T>(key: string, defaultVal: T): T => {
 
 export const saveDB = <T>(key: string, data: T): void => {
   localStorage.setItem(key, JSON.stringify(data));
+  // Sync to firestore silently
+  setDoc(doc(db, 'app_data', key), { items: data }).catch(e => console.error(e));
 };
 
-export const initializeDB = (): void => {
-  if (!localStorage.getItem('sr_users')) {
-    saveDB('sr_users', seedUsers);
-  }
-  if (!localStorage.getItem('sr_groups')) {
-    saveDB('sr_groups', seedGroups);
-  }
-  if (!localStorage.getItem('sr_challenges')) {
-    saveDB('sr_challenges', seedChallenges);
-  }
-  if (!localStorage.getItem('sr_settings')) {
-    saveDB('sr_settings', defaultSettings);
-  }
-  if (!localStorage.getItem('sr_log')) {
-    saveDB('sr_log', initialLog);
+export const initializeDB = async (): Promise<void> => {
+  // Try to pull data from Firestore, if missing, seed it.
+  try {
+    const userDoc = await getDoc(doc(db, 'app_data', 'sr_users'));
+    if (!userDoc.exists()) {
+      saveDB('sr_users', seedUsers);
+    }
+    const groupDoc = await getDoc(doc(db, 'app_data', 'sr_groups'));
+    if (!groupDoc.exists()) {
+      saveDB('sr_groups', seedGroups);
+    }
+    const challengeDoc = await getDoc(doc(db, 'app_data', 'sr_challenges'));
+    if (!challengeDoc.exists()) {
+      saveDB('sr_challenges', seedChallenges);
+    }
+    const settingDoc = await getDoc(doc(db, 'app_data', 'sr_settings'));
+    if (!settingDoc.exists()) {
+      saveDB('sr_settings', defaultSettings);
+    }
+    const logDoc = await getDoc(doc(db, 'app_data', 'sr_log'));
+    if (!logDoc.exists()) {
+      saveDB('sr_log', initialLog);
+    }
+  } catch (error) {
+    console.error("Firestore initialization error:", error);
   }
 };
 
@@ -250,7 +102,7 @@ export const writeLog = (userId: string, userName: string, action: string, detai
     action,
     details
   };
-  // limit logger to last 150 items
   const updatedLogs = [newLog, ...logs].slice(0, 150);
   saveDB('sr_log', updatedLogs);
 };
+

@@ -150,6 +150,68 @@ export default function App() {
     // initialize localStorage with seed records if empty
     initializeDB();
 
+    import('./lib/firebase').then(({ db, auth }) => {
+      import('firebase/auth').then(({ signInAnonymously }) => {
+         signInAnonymously(auth).catch(console.error);
+      });
+      import('firebase/firestore').then(({ doc, onSnapshot }) => {
+        
+        // Listen to Users
+        onSnapshot(doc(db, 'app_data', 'sr_users'), (docSnap) => {
+          if (docSnap.exists() && docSnap.data().items) {
+             const data = docSnap.data().items;
+             localStorage.setItem('sr_users', JSON.stringify(data));
+             setUsers(data);
+          }
+        });
+
+        // Listen to Groups
+        onSnapshot(doc(db, 'app_data', 'sr_groups'), (docSnap) => {
+          if (docSnap.exists() && docSnap.data().items) {
+             const data = docSnap.data().items;
+             localStorage.setItem('sr_groups', JSON.stringify(data));
+             setGroups(data);
+          }
+        });
+
+        // Listen to Challenges
+        onSnapshot(doc(db, 'app_data', 'sr_challenges'), (docSnap) => {
+          if (docSnap.exists() && docSnap.data().items) {
+             const data = docSnap.data().items;
+             localStorage.setItem('sr_challenges', JSON.stringify(data));
+             setChallenges(data);
+          }
+        });
+
+        // Listen to Settings
+        onSnapshot(doc(db, 'app_data', 'sr_settings'), (docSnap) => {
+          if (docSnap.exists() && docSnap.data().items) {
+             const data = docSnap.data().items;
+             localStorage.setItem('sr_settings', JSON.stringify(data));
+             setSettings(data);
+          }
+        });
+
+        // Listen to Logs
+        onSnapshot(doc(db, 'app_data', 'sr_log'), (docSnap) => {
+          if (docSnap.exists() && docSnap.data().items) {
+             const data = docSnap.data().items;
+             localStorage.setItem('sr_log', JSON.stringify(data));
+             setLogs(data);
+          }
+        });
+
+        // Listen to Transactions
+        onSnapshot(doc(db, 'app_data', 'sr_transactions'), (docSnap) => {
+          if (docSnap.exists() && docSnap.data().items) {
+             const data = docSnap.data().items;
+             localStorage.setItem('sr_transactions', JSON.stringify(data));
+             setTransactions(data);
+          }
+        });
+      });
+    });
+
     // Fetch records into state
     const loadedUsers = (getDB<User[]>("sr_users", []) || []).filter(Boolean);
     const loadedGroups = (getDB<Group[]>("sr_groups", []) || []).filter(
