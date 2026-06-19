@@ -147,14 +147,12 @@ export default function App() {
 
   // --- INITIALIZATION ---
   useEffect(() => {
-    import('./lib/firebase').then(({ db, auth }) => {
-      import('firebase/auth').then(({ signInAnonymously }) => {
-         signInAnonymously(auth).then(() => {
-           // Now authenticated, initialize DB from firestore or seed it
-           initializeDB().then(() => {
-             import('firebase/firestore').then(({ doc, onSnapshot }) => {
-               
-               // Listen to Users
+    import('./lib/firebase').then(({ db }) => {
+      // Now initialize DB from firestore or seed it
+      initializeDB().then(() => {
+        import('firebase/firestore').then(({ doc, onSnapshot }) => {
+          
+          // Listen to Users
                onSnapshot(doc(db, 'app_data', 'sr_users'), (docSnap) => {
                  if (docSnap.exists() && docSnap.data().items) {
                     const data = docSnap.data().items;
@@ -209,8 +207,6 @@ export default function App() {
                }, (err) => console.error("transactions listener error", err));
              });
            });
-         }).catch(console.error);
-      });
     });
 
     // Fetch records into state from cache instantly

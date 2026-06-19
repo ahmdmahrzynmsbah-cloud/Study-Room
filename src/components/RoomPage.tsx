@@ -1402,8 +1402,8 @@ export default function RoomPage({
                         className="absolute inset-0 cursor-pointer opacity-0 w-full h-full"
                       />
                       <Upload className="text-slate-500 group-hover:text-blue-600" size={20} />
-                      <span className="text-xs text-slate-500">اسحب صورة صفحة حلك أو اختر من الملفات</span>
-                      <span className="text-[10px] text-slate-500/60">التفرقة والخصم يلاحق الإثباتات غير المقنعة</span>
+                      <span className="text-xs text-slate-500">اسحب صورة حلك أو اختر ملف (حتى 5 ميجا)</span>
+                      <span className="text-[10px] text-slate-500/60">مسموح بكل الأحجام وسيتم ضغطها تلقائياً</span>
                     </div>
 
                     {fileWarning && (

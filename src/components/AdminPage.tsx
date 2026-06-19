@@ -2439,7 +2439,7 @@ export default function AdminPage({
                         تغيير الشعار
                       </label>
                       <p className="text-[10px] text-slate-400">
-                        يفضل استخدام صورة مربعة بحجم صغير (أقل من 1 ميجابايت).
+                        مسموح برفع صور حتى 5 ميجابايت (يتم ضغطها تلقائياً).
                       </p>
                     </div>
                   </div>
