@@ -60,8 +60,12 @@ export const getDB = <T>(key: string, defaultVal: T): T => {
 
 export const saveDB = <T>(key: string, data: T): void => {
   localStorage.setItem(key, JSON.stringify(data));
-  // Sync to firestore silently
-  setDoc(doc(db, 'app_data', key), { items: data }).catch(e => console.error(e));
+  // Sync to firestore with alert fallback for quota/permission issues
+  setDoc(doc(db, 'app_data', key), { items: data }).catch(e => {
+    console.error("Firebase Sync Error for", key, e);
+    // Simple fallback UI notification
+    alert("تحذير: فشل مزامنة البيانات عبر الإنترنت. قد يكون حجم البيانات كبيراً، يرجى التحديث.");
+  });
 };
 
 export const initializeDB = async (): Promise<void> => {

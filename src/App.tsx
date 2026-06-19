@@ -213,37 +213,10 @@ export default function App() {
       });
     });
 
-    // Fetch records into state
+    // Fetch records into state from cache instantly
     const loadedUsers = (getDB<User[]>("sr_users", []) || []).filter(Boolean);
-    const loadedGroups = (getDB<Group[]>("sr_groups", []) || []).filter(
-      Boolean,
-    );
-    const loadedChallenges = (
-      getDB<Challenge[]>("sr_challenges", []) || []
-    ).filter(Boolean);
-
-    // Migrate admin avatar to a professional user avatar and ensure walletBalance exists
-    let needsUpdate = false;
-    loadedUsers.forEach((u) => {
-      if (typeof u.walletBalance !== "number") {
-        u.walletBalance = 0; // initialize to 0
-        needsUpdate = true;
-      }
-      if (
-        (u.role === "admin" || u.id === "user-admin") &&
-        (u.avatar?.includes("dicebear") ||
-          u.avatar === "📚" ||
-          u.avatar?.includes("svg"))
-      ) {
-        u.avatar =
-          "data:image/svg+xml;utf8,%3Csvg%20viewBox%3D%220%200%20100%20100%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Ccircle%20cx%3D%2250%22%20cy%3D%2250%22%20r%3D%2250%22%20fill%3D%22%23e2e8f0%22%2F%3E%3Cpath%20d%3D%22M%2020%20100%20C%2020%2065%2C%2080%2065%2C%2080%20100%22%20fill%3D%22%231e293b%22%2F%3E%3Cpath%20d%3D%22M%2035%20100%20L%2040%2070%20L%2050%2082%20L%2060%2070%20L%2065%20100%20Z%22%20fill%3D%22%23ffffff%22%2F%3E%3Cpath%20d%3D%22M%2046%2080%20L%2054%2080%20L%2050%20100%20Z%22%20fill%3D%22%23dc2626%22%2F%3E%3Cpath%20d%3D%22M%2040%2050%20L%2040%2075%20L%2060%2075%20L%2060%2050%20Z%22%20fill%3D%22%23ffdbac%22%2F%3E%3Ccircle%20cx%3D%2250%22%20cy%3D%2240%22%20r%3D%2222%22%20fill%3D%22%23ffdbac%22%2F%3E%3Cpath%20d%3D%22M%2028%2040%20C%2028%2010%2C%2072%2010%2C%2072%2040%20C%2072%2025%2C%2028%2025%2C%2028%2040%22%20fill%3D%22%23334155%22%2F%3E%3Cpath%20d%3D%22M%2072%2040%20L%2072%2050%20L%2068%2050%20L%2068%2040%20Z%22%20fill%3D%22%23334155%22%2F%3E%3Cpath%20d%3D%22M%2028%2040%20L%2028%2050%20L%2032%2050%20L%2032%2040%20Z%22%20fill%3D%22%23334155%22%2F%3E%3Crect%20x%3D%2233%22%20y%3D%2235%22%20width%3D%2214%22%20height%3D%2210%22%20rx%3D%222%22%20fill%3D%22none%22%20stroke%3D%22%231e293b%22%20stroke-width%3D%222.5%22%2F%3E%3Crect%20x%3D%2253%22%20y%3D%2235%22%20width%3D%2214%22%20height%3D%2210%22%20rx%3D%222%22%20fill%3D%22none%22%20stroke%3D%22%231e293b%22%20stroke-width%3D%222.5%22%2F%3E%3Cline%20x1%3D%2247%22%20y1%3D%2240%22%20x2%3D%2253%22%20y2%3D%2240%22%20stroke%3D%22%231e293b%22%20stroke-width%3D%222.5%22%2F%3E%3Cline%20x1%3D%2228%22%20y1%3D%2240%22%20x2%3D%2233%22%20y2%3D%2240%22%20stroke%3D%22%231e293b%22%20stroke-width%3D%222.5%22%2F%3E%3Cline%20x1%3D%2267%22%20y1%3D%2240%22%20x2%3D%2272%20%22%20y2%3D%2240%22%20stroke%3D%22%231e293b%22%20stroke-width%3D%222.5%22%2F%3E%3C%2Fsvg%3E";
-        needsUpdate = true;
-      }
-    });
-
-    if (needsUpdate) {
-      saveDB("sr_users", loadedUsers);
-    }
+    const loadedGroups = (getDB<Group[]>("sr_groups", []) || []).filter(Boolean);
+    const loadedChallenges = (getDB<Challenge[]>("sr_challenges", []) || []).filter(Boolean);
 
     let loadedSettings = getDB<AppSettings>("sr_settings", {
       appName: "StudyRoom",
@@ -258,28 +231,7 @@ export default function App() {
 
     const loadedSession = getDB<Session | null>("sr_sessions", null);
     const loadedLogs = getDB<LogEntry[]>("sr_log", []);
-    const loadedTransactions = getDB<TransactionRequest[]>(
-      "sr_transactions",
-      [],
-    );
-
-    const now = Date.now();
-    let hasExpiredMemberships = false;
-    loadedUsers.forEach((user) => {
-      if (
-        user.membershipTier &&
-        user.membershipExpiry &&
-        user.membershipExpiry < now
-      ) {
-        user.membershipTier = undefined; // reset to free
-        user.membershipExpiry = undefined;
-        hasExpiredMemberships = true;
-      }
-    });
-
-    if (hasExpiredMemberships) {
-      saveDB("sr_users", loadedUsers);
-    }
+    const loadedTransactions = getDB<TransactionRequest[]>("sr_transactions", []);
 
     setUsers(loadedUsers);
     setGroups(loadedGroups);

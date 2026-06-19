@@ -554,23 +554,22 @@ export default function RoomPage({
   }, [challenge.submissions, currentUser.id]);
 
   // --- 2. FILE UPLOAD & BASE64 PARSE ---
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     setFileWarning('');
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Check size (> 500KB warns user)
-    if (file.size > 500 * 1024) {
-      setFileWarning('تنبيه: حجم الصورة أكبر من 500 كيلوبايت، قد يستغرق الرفع وتخزينها وقتاً أطول.');
+    try {
+      setFileWarning('جار العمل على ضغط الصورة لتسريع حفظ الإنجاز...');
+      const { compressImage } = await import('../utils');
+      // Compress to 800px width and lower quality to keep challenges doc very small
+      const resized = await compressImage(file, 800, 800, 0.6);
+      setProofFileBase64(resized);
+      setFileWarning(''); // clear warning if success
+    } catch (err) {
+      setFileWarning('حدث خطأ أثناء معالجة الصورة.');
+      console.error(err);
     }
-
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      if (typeof reader.result === 'string') {
-        setProofFileBase64(reader.result);
-      }
-    };
-    reader.readAsDataURL(file);
   };
 
   // --- 3. SUBMISSION TRANSACTION ---

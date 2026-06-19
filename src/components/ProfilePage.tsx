@@ -1483,14 +1483,17 @@ export default function ProfilePage({
                   <input
                     type="file"
                     accept="image/*"
-                    onChange={(e) => {
+                    onChange={async (e) => {
                       const file = e.target.files?.[0];
                       if (file) {
-                        const reader = new FileReader();
-                        reader.onloadend = () => {
-                          setScreenshot(reader.result as string);
-                        };
-                        reader.readAsDataURL(file);
+                        try {
+                          const { compressImage } = await import("../utils");
+                          // Transaction receipts usually need some detail to read numbers, so 800px width is good
+                          const resized = await compressImage(file, 800, 800, 0.7);
+                          setScreenshot(resized);
+                        } catch (error) {
+                          console.error("Failed to compress receipt:", error);
+                        }
                       }
                     }}
                     className="w-full text-sm bg-white border border-slate-200 rounded-xl px-3 py-2 text-slate-800"

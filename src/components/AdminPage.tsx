@@ -2414,17 +2414,21 @@ export default function AdminPage({
                         type="file"
                         accept="image/*"
                         className="hidden"
-                        onChange={(e) => {
+                        onChange={async (e) => {
                           const file = e.target.files?.[0];
                           if (file) {
-                            const reader = new FileReader();
-                            reader.onloadend = () => {
+                            try {
+                              // We import dynamically if needed, or we just put it at the top
+                              // but to be safe let's just dynamic import to avoid breaking JSX
+                              const { compressImage } = await import("../utils");
+                              const resized = await compressImage(file, 200, 200, 0.8);
                               setLocalSettings((prev) => ({
                                 ...prev,
-                                platformLogo: reader.result as string,
+                                platformLogo: resized,
                               }));
-                            };
-                            reader.readAsDataURL(file);
+                            } catch (error) {
+                              console.error(error);
+                            }
                           }
                         }}
                       />
