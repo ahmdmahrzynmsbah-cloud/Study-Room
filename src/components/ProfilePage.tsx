@@ -759,6 +759,27 @@ export default function ProfilePage({
               <p className="text-xs text-slate-500 font-sans mt-1">
                 {currentUser.email}
               </p>
+              
+              {currentUser.studentCode && (
+                <div className="mt-3 flex items-center justify-center gap-2">
+                  <span className="text-[10px] font-bold text-slate-400">
+                    كود الطالب:
+                  </span>
+                  <div className="bg-slate-100 border border-slate-200 text-slate-700 font-mono text-sm font-black px-3 py-1 rounded-lg flex items-center gap-2">
+                    {currentUser.studentCode}
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(currentUser.studentCode!);
+                        // visual feedback could be added here
+                      }}
+                      className="text-slate-400 hover:text-blue-500 transition-colors"
+                      title="نسخ الكود"
+                    >
+                      <Copy size={12} />
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {currentUser.role !== "admin" && (
                 <div className="grid grid-cols-2 gap-3 mt-5 w-full">

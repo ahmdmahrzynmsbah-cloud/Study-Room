@@ -11,6 +11,7 @@ import {
   AppSettings,
   LogEntry,
   TransactionRequest,
+  UserNotification,
 } from "../types";
 import {
   Users,
@@ -47,11 +48,13 @@ interface AdminPageProps {
   settings: AppSettings;
   logs: LogEntry[];
   transactions: TransactionRequest[];
+  notifications: UserNotification[];
   onUpdateUsers: (updatedUsers: User[]) => void;
   onUpdateGroups: (updatedGroups: Group[]) => void;
   onUpdateChallenges: (updatedChallenges: Challenge[]) => void;
   onUpdateSettings: (newSettings: AppSettings) => void;
   onUpdateTransactions: (transactions: TransactionRequest[]) => void;
+  onUpdateNotifications: (newNotifications: UserNotification[]) => void;
   onAddLog: (action: string, details: string) => void;
   onNavigate: (page: string) => void;
   onSelectGroup: (groupId: string) => void;
@@ -64,7 +67,8 @@ interface AdminPageProps {
     | "settings"
     | "logs"
     | "wallet"
-    | "plans";
+    | "plans"
+    | "notifications";
 }
 
 export default function AdminPage({
@@ -75,11 +79,13 @@ export default function AdminPage({
   settings,
   logs,
   transactions,
+  notifications,
   onUpdateUsers,
   onUpdateGroups,
   onUpdateChallenges,
   onUpdateSettings,
   onUpdateTransactions,
+  onUpdateNotifications,
   onAddLog,
   onNavigate,
   onSelectGroup,
@@ -128,6 +134,14 @@ export default function AdminPage({
   const [pointsDelta, setPointsDelta] = useState<number>(10);
   const [adjustType, setAdjustType] = useState<"points" | "wallet">("points");
   const [adjustReason, setAdjustReason] = useState("");
+
+  // Notification wizard form states
+  const [notifTitle, setNotifTitle] = useState("");
+  const [notifMessage, setNotifMessage] = useState("");
+  const [notifType, setNotifType] = useState<'info' | 'success' | 'warning' | 'penalty' | 'admin'>("info");
+  const [notifTargetType, setNotifTargetType] = useState<"all" | "specific">("all");
+  const [notifTargetUserIds, setNotifTargetUserIds] = useState<string[]>([]);
+  const [notifStudentSearchQuery, setNotifStudentSearchQuery] = useState("");
 
   // Settings editing local state
   const [localSettings, setLocalSettings] = useState<AppSettings>({
@@ -280,6 +294,57 @@ export default function AdminPage({
   const displayError = (msg: string) => {
     setActionError(msg);
     setTimeout(() => setActionError(""), 4000);
+  };
+
+  const handlePublishNotification = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!notifTitle.trim() || !notifMessage.trim()) {
+      displayError("يرجى ملء جميع الحقول المطلوبة (العنوان ومضمون الرسالة).");
+      return;
+    }
+
+    const targetIds = notifTargetType === "all" ? ["all"] : notifTargetUserIds;
+    if (notifTargetType === "specific" && targetIds.length === 0) {
+      displayError("يرجى تحديد طالب واحد على الأقل للمستهدفين.");
+      return;
+    }
+
+    const newNotif: UserNotification = {
+      id: "notif_" + Date.now(),
+      userIds: targetIds,
+      title: notifTitle.trim(),
+      message: notifMessage.trim(),
+      type: notifType,
+      timestamp: Date.now(),
+      readBy: [],
+    };
+
+    onUpdateNotifications([...notifications, newNotif]);
+    onAddLog(
+      "إرسال إشعار دراسي",
+      `تم إرسال تنبيه بعنوان "${notifTitle.trim()}" إلى الجمهور المستهدف (${notifTargetType === 'all' ? 'جميع الطلاب' : `${targetIds.length} طالب`})`
+    );
+
+    // Reset Form
+    setNotifTitle("");
+    setNotifMessage("");
+    setNotifType("info");
+    setNotifTargetType("all");
+    setNotifTargetUserIds([]);
+    displaySuccess("تم نشر وإرسال التنبيه الفوري لكافة الطلاب المستهدفين بنجاح! 🚀");
+  };
+
+  const handleDeletePastNotification = (notifId: string) => {
+    setConfirmState({
+      isOpen: true,
+      message: "هل أنت متأكد من رغبتك في حذف هذا التنبيه من سجلات الطلاب؟ لن يتوفر لهم بعد الآن.",
+      onConfirm: () => {
+        const updated = notifications.filter(n => n.id !== notifId);
+        onUpdateNotifications(updated);
+        onAddLog("حذف إشعار", `تم سحب وحذف الإشعار ذي الرمز ${notifId}`);
+        setConfirmState(null);
+      }
+    });
   };
 
   // --- ACTIONS ---
@@ -2763,6 +2828,337 @@ export default function AdminPage({
                     </tbody>
                   </table>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 8: NOTIFICATIONS & BROADCASTS */}
+          {activeTab === "notifications" && (
+            <div className="space-y-6 animate-in fade-in duration-300" dir="rtl">
+              {/* Notifications Header Banner */}
+              <div className="p-6 bg-gradient-to-tr from-blue-600 via-indigo-600 to-indigo-700 rounded-3xl text-white shadow-lg relative overflow-hidden text-right">
+                <div className="absolute top-0 left-0 w-32 h-32 bg-white/5 rounded-full blur-2xl"></div>
+                <div className="relative z-10 space-y-2">
+                  <span className="px-3 py-1 bg-white/20 text-[10px] font-bold rounded-full uppercase tracking-wider font-mono">BROADCAST HUB</span>
+                  <h2 className="text-xl md:text-2xl font-black font-sans">الإشعارات والتنبيهات العامة والخاصة</h2>
+                  <p className="text-xs text-white/85 max-w-2xl leading-relaxed font-sans">
+                    يمكنك إرسال تنبيهات عامة لكافة الطلاب من أجل الامتحانات والمواعيد، أو توجيه رسائل خاصة ومكافآت/تنبيهات لطلاب محددين. ستصلهم الإشعارات فورياً مع رنين موسيقي!
+                  </p>
+                </div>
+              </div>
+
+              {/* Grid content */}
+              <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
+                
+                {/* Column 1: Notification Creation Form */}
+                <div className="xl:col-span-5 bg-white border border-slate-200 rounded-2xl p-5 shadow-xl space-y-4 text-right">
+                  <h3 className="font-black text-slate-800 text-sm font-sans flex items-center gap-2 pb-2 border-b border-slate-100">
+                    <span>✨</span>
+                    إنشاء إشعار جديد وإرساله
+                  </h3>
+
+                  {(actionSuccess || actionError) && (
+                    <div className="space-y-2 animate-in fade-in duration-200">
+                      {actionSuccess && (
+                        <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-750 text-xs font-semibold rounded-xl text-center font-sans">
+                          {actionSuccess}
+                        </div>
+                      )}
+                      {actionError && (
+                        <div className="p-3 bg-rose-50 border border-rose-200 text-rose-750 text-xs font-semibold rounded-xl text-center font-sans">
+                          {actionError}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  <form onSubmit={handlePublishNotification} className="space-y-4 text-xs">
+                    {/* Notification Type */}
+                    <div>
+                      <label className="block text-slate-500 font-bold mb-1.5 font-sans">أيقونة ونوع الإشعار</label>
+                      <div className="grid grid-cols-5 gap-2">
+                        {[
+                          { key: 'info', icon: '📢', label: 'إداري عام', color: 'bg-blue-50 border-blue-200 text-blue-600' },
+                          { key: 'success', icon: '💎', label: 'مكافأة/نجاح', color: 'bg-emerald-50 border-emerald-200 text-emerald-600' },
+                          { key: 'warning', icon: '⚠️', label: 'تحذيري', color: 'bg-amber-50 border-amber-200 text-amber-600' },
+                          { key: 'penalty', icon: '🚨', label: 'عقوبي/مخالفة', color: 'bg-rose-50 border-rose-201 text-rose-600' },
+                          { key: 'admin', icon: '⭐', label: 'تميز فوري', color: 'bg-purple-50 border-purple-200 text-purple-600' },
+                        ].map((typ) => (
+                          <button
+                            key={typ.key}
+                            type="button"
+                            onClick={() => setNotifType(typ.key as any)}
+                            className={`p-2.5 rounded-xl border flex flex-col items-center justify-center gap-1.5 transition-all text-center cursor-pointer ${
+                              notifType === typ.key
+                                ? `${typ.color} ring-2 ring-indigo-500 scale-102 font-bold shadow-sm`
+                                : "bg-slate-50 border-slate-200 hover:bg-slate-100/70 text-slate-600"
+                            }`}
+                          >
+                            <span className="text-sm">{typ.icon}</span>
+                            <span className="text-[9px] whitespace-nowrap leading-none scale-90">{typ.label}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Notification Title */}
+                    <div>
+                      <label className="block text-slate-500 font-bold mb-1 font-sans">عنوان الإشعار</label>
+                      <input
+                        type="text"
+                        value={notifTitle}
+                        onChange={(e) => setNotifTitle(e.target.value)}
+                        placeholder="مثال: تنبيه هام بخصوص موعد البث المباشر الغد"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-slate-800 placeholder-slate-400 focus:outline-none focus:border-indigo-500 transition-all font-sans text-right"
+                        required
+                      />
+                    </div>
+
+                    {/* Notification Message */}
+                    <div>
+                      <label className="block text-slate-500 font-bold mb-1 font-sans">مضمون الرسالة (الإشعار)</label>
+                      <textarea
+                        value={notifMessage}
+                        onChange={(e) => setNotifMessage(e.target.value)}
+                        rows={3}
+                        placeholder="اكتب تفاصيل الإعلان هنا بوضوح لكي يظهر للطلاب في صندوق إشعاراتهم..."
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-slate-800 placeholder-slate-400 focus:outline-none focus:border-indigo-500 transition-all font-sans leading-relaxed text-right"
+                        required
+                      />
+                    </div>
+
+                    {/* Target Audience */}
+                    <div>
+                      <label className="block text-slate-500 font-bold mb-1.5 font-sans">الجمهور المستهدف (الطلاب)</label>
+                      <div className="flex bg-slate-100 p-1 rounded-xl mb-3 shadow-inner">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setNotifTargetType("all");
+                            setNotifTargetUserIds([]);
+                          }}
+                          className={`flex-1 py-1.5 text-center font-bold font-sans rounded-lg transition-all text-[11px] cursor-pointer ${
+                            notifTargetType === "all"
+                              ? "bg-white text-indigo-700 shadow-sm"
+                              : "text-slate-500 hover:text-slate-700"
+                          }`}
+                        >
+                          🌍 جميع الطلاب (عام)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setNotifTargetType("specific")}
+                          className={`flex-1 py-1.5 text-center font-bold font-sans rounded-lg transition-all text-[11px] cursor-pointer ${
+                            notifTargetType === "specific"
+                              ? "bg-white text-indigo-700 shadow-sm"
+                              : "text-slate-500 hover:text-slate-700"
+                          }`}
+                        >
+                          🎯 الطلاب المحددين فقط
+                        </button>
+                      </div>
+
+                      {/* If Specific: Select students */}
+                      {notifTargetType === "specific" && (
+                        <div className="border border-slate-205 bg-slate-50/50 rounded-xl p-3.5 space-y-2.5">
+                          <label className="block text-slate-400 font-bold text-[10px] font-sans">اضغط لاختيار وتحديد طالب أو أكثر من القائمة:</label>
+                          <div className="relative mb-2">
+                            <span className="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none text-slate-400">
+                              <Search size={15} />
+                            </span>
+                            <input
+                              type="text"
+                              value={notifStudentSearchQuery}
+                              onChange={(e) => setNotifStudentSearchQuery(e.target.value)}
+                              placeholder="ابحث بالاسم، الإيميل أو كود الطالب..."
+                              className="w-full bg-white border border-slate-200 rounded-xl pr-10 pl-3.5 py-2 text-xs text-slate-800 focus:bg-white focus:ring-2 focus:ring-blue-100 focus:border-blue-500 outline-none transition-all placeholder:text-slate-400"
+                            />
+                            {notifStudentSearchQuery && (
+                              <button
+                                type="button"
+                                onClick={() => setNotifStudentSearchQuery("")}
+                                className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 hover:text-slate-600 cursor-pointer p-2"
+                              >
+                                <X size={14} />
+                              </button>
+                            )}
+                          </div>
+                          <div className="max-h-40 overflow-y-auto divide-y divide-slate-100 border border-slate-200 rounded-xl bg-white">
+                            {users
+                              .filter((u) => u.role !== "admin")
+                              .filter((u) => {
+                                if (!notifStudentSearchQuery.trim()) return true;
+                                const q = notifStudentSearchQuery.toLowerCase();
+                                return u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q) || (u.studentCode && u.studentCode.toLowerCase().includes(q));
+                              })
+                              .map((u) => {
+                                const isSelected = notifTargetUserIds.includes(u.id);
+                                return (
+                                  <div
+                                    key={u.id}
+                                    onClick={() => {
+                                      if (isSelected) {
+                                        setNotifTargetUserIds(notifTargetUserIds.filter(id => id !== u.id));
+                                      } else {
+                                        setNotifTargetUserIds([...notifTargetUserIds, u.id]);
+                                      }
+                                    }}
+                                    className={`p-2.5 flex items-center justify-between cursor-pointer transition-colors ${
+                                      isSelected ? "bg-indigo-50/45 hover:bg-indigo-50/70" : "hover:bg-slate-50"
+                                    }`}
+                                  >
+                                    <div className="flex items-center gap-2">
+                                      <div className="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center font-bold text-[10px] object-cover shrink-0">
+                                        {u.avatar ? (
+                                          u.avatar.startsWith("http") ? (
+                                            <img src={u.avatar} alt="avatar" className="w-full h-full object-cover rounded-full" />
+                                          ) : (
+                                            <span>{u.avatar}</span>
+                                          )
+                                        ) : "📚"}
+                                      </div>
+                                      <div>
+                                        <p className="font-bold text-slate-800 leading-tight flex items-center gap-1">
+                                          {u.name}
+                                          {u.studentCode && <span className="text-[9px] bg-slate-100 px-1.5 py-0.5 rounded text-slate-500 font-mono">{u.studentCode}</span>}
+                                        </p>
+                                        <p className="text-[10px] text-slate-400 font-mono scale-95 origin-right">{u.email}</p>
+                                      </div>
+                                    </div>
+                                    <input
+                                      type="checkbox"
+                                      checked={isSelected}
+                                      onChange={() => {}} // handled by click
+                                      className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer h-3.5 w-3.5"
+                                    />
+                                  </div>
+                                );
+                              })}
+                            {users.filter((u) => u.role !== "admin").length === 0 && (
+                              <div className="p-4 text-center text-slate-400">لا يوجد طلاب مسجلين في النظام.</div>
+                            )}
+                            {users.filter((u) => u.role !== "admin").length > 0 && users.filter((u) => u.role !== "admin").filter((u) => {
+                                if (!notifStudentSearchQuery.trim()) return true;
+                                const q = notifStudentSearchQuery.toLowerCase();
+                                return u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q) || (u.studentCode && u.studentCode.toLowerCase().includes(q));
+                              }).length === 0 && (
+                              <div className="p-4 text-center text-slate-400 text-[10px]">لا توجد نتائج بحث متطابقة.</div>
+                            )}
+                          </div>
+                          {notifTargetUserIds.length > 0 && (
+                            <p className="text-[10px] font-bold text-indigo-600 font-sans">
+                              ✓ تم تحديد {notifTargetUserIds.length} طالب لإرسال الرسالة الخاصة إليهم.
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Submit Button */}
+                    <button
+                      type="submit"
+                      className="w-full py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold rounded-xl shadow-md cursor-pointer select-none transition-all duration-250 flex items-center justify-center gap-1.5 focus:ring-2 focus:ring-indigo-500/20 outline-none font-sans"
+                    >
+                      <span className="text-sm">🚀</span>
+                      <span>نشر وبث الإشعار الفوري</span>
+                    </button>
+                  </form>
+                </div>
+
+                {/* Column 2: Old Sent Notifications List */}
+                <div className="xl:col-span-7 bg-white border border-slate-200 rounded-2xl p-5 shadow-xl space-y-4 text-right">
+                  <h3 className="font-black text-slate-800 text-sm font-sans flex items-center justify-between pb-2 border-b border-slate-100">
+                    <span className="flex items-center gap-2">
+                      <span>📊</span>
+                      أرشيف الإشعارات ومؤشرات قراءة الطلاب
+                    </span>
+                    <span className="text-[10px] font-mono bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full font-bold">
+                      {notifications.length} إشعار
+                    </span>
+                  </h3>
+
+                  <div className="space-y-3.5 max-h-[500px] overflow-y-auto pr-1">
+                    {notifications.length === 0 ? (
+                      <div className="p-12 text-center text-slate-400 space-y-2.5">
+                        <span className="text-4xl block">📦</span>
+                        <p className="text-xs font-sans">لم يتم إرسال أي إشعارات سابقة حتى الآن.</p>
+                      </div>
+                    ) : (
+                      [...notifications]
+                        .sort((a, b) => b.timestamp - a.timestamp)
+                        .map((notif) => {
+                          const isBroadcast = notif.userIds.includes("all");
+                          const totalExpected = isBroadcast
+                            ? users.filter(u => u.role !== "admin").length
+                            : notif.userIds.length;
+                          const readCount = notif.readBy ? notif.readBy.length : 0;
+                          const percent = totalExpected > 0 ? Math.round((readCount / totalExpected) * 100) : 0;
+                          const safePercent = percent > 100 ? 100 : percent;
+
+                          return (
+                            <div
+                              key={notif.id}
+                              className="p-4 border border-slate-100 rounded-xl hover:border-slate-200/80 hover:shadow-md transition-all duration-200 bg-slate-50/20 text-right"
+                            >
+                              <div className="flex items-start justify-between gap-4">
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeletePastNotification(notif.id)}
+                                  className="text-slate-400 hover:text-red-500 hover:bg-red-50 p-1.5 rounded-xl transition-all cursor-pointer"
+                                  title="حذف وسحب الإشعار فورياً"
+                                >
+                                  ✕
+                                </button>
+
+                                <div className="space-y-1.5 flex-1 text-xs">
+                                  <div className="flex flex-wrap items-center gap-1.5 justify-end">
+                                    <span className={`text-[9px] px-2 py-0.5 rounded-full font-bold font-sans ${
+                                      isBroadcast ? "bg-teal-50 text-teal-600 border border-teal-100" : "bg-purple-50 text-purple-600 border border-purple-100"
+                                    }`}>
+                                      {isBroadcast ? "عام" : "خاص"}
+                                    </span>
+                                    <h4 className="font-black text-slate-800 leading-tight font-sans">{notif.title}</h4>
+                                    <span className="text-slate-400 shrink-0">
+                                      {notif.type === 'penalty' && <ShieldAlert size={13} className="text-red-500 inline" />}
+                                      {notif.type === 'warning' && <AlertCircle size={13} className="text-amber-500 inline" />}
+                                      {notif.type === 'success' && <Check size={13} className="text-emerald-500 inline" />}
+                                      {notif.type === 'info' && <Settings size={13} className="text-blue-500 inline" />}
+                                      {notif.type === 'admin' && <RefreshCw size={13} className="text-purple-500 inline" />}
+                                    </span>
+                                  </div>
+
+                                  <p className="text-[11px] text-slate-500 leading-relaxed font-sans mt-1">
+                                    {notif.message}
+                                  </p>
+
+                                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 pt-2 border-t border-slate-100 text-[10px] text-slate-400 font-sans justify-end">
+                                    {/* Indicator reads state */}
+                                    <span className="flex items-center gap-1 font-bold text-slate-700">
+                                      <span className="text-emerald-500">✓</span> 
+                                      مؤشر القراءة: {readCount} من {totalExpected} ({safePercent}%)
+                                    </span>
+                                    <span className="flex items-center gap-1">
+                                      <Clock size={11} className="inline-block" />
+                                      {new Date(notif.timestamp).toLocaleString("ar-EG", { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                    </span>
+                                  </div>
+
+                                  {/* If specific, show names */}
+                                  {!isBroadcast && (
+                                    <div className="mt-2 p-2 bg-slate-100/50 rounded-lg text-[9px] text-slate-400 leading-tight text-right">
+                                      <span className="font-bold text-slate-500">المستلم المخصص:</span>{" "}
+                                      {notif.userIds.map((uid) => users.find((u) => u.id === uid)?.name || "طالب مجهول").join(" ، ")}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })
+                    )}
+                  </div>
+                </div>
+
               </div>
             </div>
           )}

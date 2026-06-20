@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { User, Challenge, Submission } from '../types';
-import { Clock, Book, HelpCircle, FileText, CheckCircle2, ChevronRight, Upload, AlertTriangle, Star, Check, Search } from 'lucide-react';
+import { Clock, Book, HelpCircle, FileText, CheckCircle2, ChevronRight, Upload, AlertTriangle, Star, Check, Search, Bell } from 'lucide-react';
 
 const calculateSegmentAngle = (count: number): number => {
   return 360 / (count || 4);
@@ -221,6 +221,30 @@ export default function RoomPage({
   const [selectedWebSurah, setSelectedWebSurah] = useState<string>('radio');
   const [reciterSearch, setReciterSearch] = useState<string>('');
   const [surahSearch, setSurahSearch] = useState<string>('');
+
+  // --- STRICT FOCUS MODE STATES & REFS ---
+  interface RoomNotification {
+    id: string;
+    title: string;
+    message: string;
+    type: 'info' | 'success' | 'warning' | 'violation' | 'system';
+    timestamp: number;
+    read: boolean;
+  }
+
+  const [notifications, setNotifications] = useState<RoomNotification[]>([]);
+  const [showNotifDropdown, setShowNotifDropdown] = useState(false);
+
+  const [showViolationBanner, setShowViolationBanner] = useState<{
+    id: string;
+    userId: string;
+    userName: string;
+    platform: string;
+    timestamp: number;
+    penaltyPoints: number;
+  } | null>(null);
+  const playedViolationsRef = useRef<Set<string>>(new Set());
+  const lastViolationTimeRef = useRef<number>(0);
 
   const fullStopQuranAudio = () => {
     if (quranAudioRef.current) {
@@ -496,6 +520,212 @@ export default function RoomPage({
       if (graceTimerInterval.current) clearInterval(graceTimerInterval.current);
     };
   }, [challenge.endTime, challenge.status]);
+
+  // --- 1.5. FOCUS MODE REAL-TIME BROADCAST & LOCAL LOSS DETECTION ---
+  const playBuzzerSound = () => {
+    try {
+      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioContextClass) return;
+      const ctx = new AudioContextClass();
+      
+      const osc1 = ctx.createOscillator();
+      const osc2 = ctx.createOscillator();
+      const gainNode = ctx.createGain();
+      
+      osc1.type = 'sawtooth';
+      osc2.type = 'sine';
+      
+      osc1.frequency.setValueAtTime(160, ctx.currentTime);
+      osc1.frequency.linearRampToValueAtTime(320, ctx.currentTime + 0.2);
+      osc1.frequency.linearRampToValueAtTime(160, ctx.currentTime + 0.4);
+      osc1.frequency.linearRampToValueAtTime(320, ctx.currentTime + 0.6);
+      osc1.frequency.linearRampToValueAtTime(160, ctx.currentTime + 0.8);
+      
+      osc2.frequency.setValueAtTime(320, ctx.currentTime);
+      osc2.frequency.linearRampToValueAtTime(160, ctx.currentTime + 0.2);
+      osc2.frequency.linearRampToValueAtTime(320, ctx.currentTime + 0.4);
+      osc2.frequency.linearRampToValueAtTime(160, ctx.currentTime + 0.6);
+      osc2.frequency.linearRampToValueAtTime(320, ctx.currentTime + 0.8);
+      
+      gainNode.gain.setValueAtTime(0.18, ctx.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.82);
+      
+      osc1.connect(gainNode);
+      osc2.connect(gainNode);
+      gainNode.connect(ctx.destination);
+      
+      osc1.start();
+      osc2.start();
+      osc1.stop(ctx.currentTime + 0.85);
+      osc2.stop(ctx.currentTime + 0.85);
+    } catch (err) {
+      console.error("Audio buzzer error:", err);
+    }
+  };
+
+  // Synchronize dynamic and real-time notifications for the active session
+  useEffect(() => {
+    setNotifications((prev) => {
+      const map = new Map<string, RoomNotification>();
+      prev.forEach(item => map.set(item.id, item));
+
+      let hasNew = false;
+
+      // 1. Process Focus Violations
+      if (challenge.focusViolations && challenge.focusViolations.length > 0) {
+        challenge.focusViolations.forEach((v) => {
+          const notifId = `violation-${v.id || v.timestamp}`;
+          if (!map.has(notifId)) {
+            map.set(notifId, {
+              id: notifId,
+              title: 'تنبيه انضباط التركيز',
+              message: `مغادرة الطالب ${v.userName} لصفحة المذاكرة النشطة (تم خصم -${v.penaltyPoints} نقاط).`,
+              type: 'violation',
+              timestamp: v.timestamp || Date.now(),
+              read: false,
+            });
+            hasNew = true;
+          }
+        });
+      }
+
+      // 2. Process Submissions
+      if (challenge.submissions && challenge.submissions.length > 0) {
+        challenge.submissions.forEach((s) => {
+          const notifId = `submission-${s.userId}`;
+          if (!map.has(notifId)) {
+            const studentName = users.find(u => u.id === s.userId)?.name || 'أحد الزملاء';
+            map.set(notifId, {
+              id: notifId,
+              title: 'تسليم إثبات المذاكرة',
+              message: `أنهى الطالب ${studentName} دراسة التحدي الحالي بنجاح وأرسل إثباتات حضور الجلسة للتقييم.`,
+              type: 'success',
+              timestamp: s.submittedAt || Date.now(),
+              read: false,
+            });
+            hasNew = true;
+          }
+        });
+      }
+
+      // 3. Process Initial room joins/events
+      const challengeStartId = `room-start-${challenge.id}`;
+      if (!map.has(challengeStartId)) {
+        map.set(challengeStartId, {
+          id: challengeStartId,
+          title: 'بدء جلسة المذاكرة',
+          message: `انطلقت جلسة المذاكرة المشتركة لمجموعة "${challenge.title}" بمادة ${challenge.subject} لمدة ${challenge.durationMinutes} دقيقة.`,
+          type: 'info',
+          timestamp: challenge.startTime || Date.now(),
+          read: true,
+        });
+        hasNew = true;
+      }
+
+      if (hasNew) {
+        return Array.from(map.values()).sort((a, b) => b.timestamp - a.timestamp);
+      }
+      return prev;
+    });
+  }, [challenge.focusViolations, challenge.submissions, challenge.id, challenge.startTime, challenge.title, challenge.subject, challenge.durationMinutes, users]);
+
+  // Play subtle warning audio chime for new focus violations
+  useEffect(() => {
+    if (challenge.focusViolations && challenge.focusViolations.length > 0) {
+      const violations = challenge.focusViolations;
+      const latest = violations[violations.length - 1];
+      
+      if (!playedViolationsRef.current.has(latest.id)) {
+        playedViolationsRef.current.add(latest.id);
+        
+        // Populate all historical ones on first load to prevent buzzer overload
+        const allIds = violations.map(v => v.id);
+        const isInitialLoad = playedViolationsRef.current.size <= 1 && allIds.length > 1;
+        
+        if (isInitialLoad) {
+          allIds.forEach(id => playedViolationsRef.current.add(id));
+        } else {
+          // Play a subtle tone/beep
+          playBuzzerSound();
+        }
+      }
+    }
+  }, [challenge.focusViolations]);
+
+  // Handle local user leaving/switching tabs
+  useEffect(() => {
+    const isActiveRoom = challenge.status === 'active' && !timerFinished;
+    const isParticipant = challenge.participants.includes(currentUser.id);
+    const isUser = currentUser.role !== 'admin';
+
+    if (!isActiveRoom || !isParticipant || !isUser) return;
+
+    const handleFocusLoss = () => {
+      const now = Date.now();
+      // Debounce: minimum 25 seconds between focus loss events
+      if (now - lastViolationTimeRef.current < 25000) {
+        return;
+      }
+      
+      lastViolationTimeRef.current = now;
+      const deduction = 10;
+
+      // Update local and global point state
+      const updatedUsers = users.map((u) => {
+        if (u.id === currentUser.id) {
+          return {
+            ...u,
+            points: Math.max(0, u.points - deduction),
+          };
+        }
+        return u;
+      });
+
+      // Professional, 100% accurate log
+      onAddLog('تنبيه الانضباط 🚨 Focus Mode', `رصد النظام خروج الطالب ${currentUser.name} من واجهة المذاكرة النشطة (مغادرة الصفحة أو تبديل التبويب/التبسيط). تم تطبيق غرامة ${deduction} نقاط.`);
+
+      // Update challenge focusViolations array real-time
+      const newViolation = {
+        id: `${currentUser.id}-${now}`,
+        userId: currentUser.id,
+        userName: currentUser.name,
+        platform: "مغادرة الصفحة أو تبديل التبويب",
+        timestamp: now,
+        penaltyPoints: deduction
+      };
+
+      const updatedViolations = [...(challenge.focusViolations || []), newViolation];
+      
+      onUpdateUsers(updatedUsers);
+      onUpdateChallenge({
+        ...challenge,
+        focusViolations: updatedViolations
+      });
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        handleFocusLoss();
+      }
+    };
+
+    const handleWindowBlur = () => {
+      // Small timeout to allow popups or short interactions
+      setTimeout(() => {
+        if (!document.hasFocus() && document.visibilityState === 'hidden') {
+          handleFocusLoss();
+        }
+      }, 500);
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('blur', handleWindowBlur);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('blur', handleWindowBlur);
+    };
+  }, [challenge.status, timerFinished, challenge.participants, currentUser.id, currentUser.role, challenge.focusViolations, users, onUpdateUsers, onUpdateChallenge]);
 
   // Grace Period countdown
   const startGracePeriodCountdown = () => {
@@ -773,7 +1003,7 @@ export default function RoomPage({
   return (
     <div className="space-y-6 pb-12" dir="rtl">
       {/* Header back */}
-      <div className="flex justify-between items-center bg-white p-3 md:p-4 rounded-xl border border-slate-200 shadow-sm relative z-10">
+      <div className="flex justify-between items-center bg-white p-3 md:p-4 rounded-xl border border-slate-200 shadow-sm relative z-30">
         <button
           onClick={onLeaveRoom}
           className="flex items-center gap-1.5 px-4 py-2 bg-slate-50 border-slate-200/80 text-slate-800 text-xs font-semibold rounded-full border hover:bg-slate-100 transition-colors cursor-pointer"
@@ -808,6 +1038,91 @@ export default function RoomPage({
               <AlertTriangle size={14} /> الخروج وإنهاء مبكر (-10 نقطة)
             </button>
           )}
+
+          {/* Professional Notification Dropdown */}
+          <div className="relative">
+            <button
+              onClick={() => {
+                setShowNotifDropdown(!showNotifDropdown);
+                // Mark all as read when opening
+                setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+              }}
+              className="relative p-2 bg-slate-50 hover:bg-slate-200/60 border border-slate-200 text-slate-600 hover:text-indigo-600 rounded-full transition-all cursor-pointer flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+              title="الإشعارات الفورية والتنبيهات المباشرة"
+            >
+              <Bell size={18} className={notifications.some(n => !n.read) ? "animate-bounce text-indigo-600" : ""} />
+              {notifications.some(n => !n.read) && (
+                <span className="absolute top-0 right-0 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[9px] font-sans font-black text-white px-1 shadow animate-pulse">
+                  {notifications.filter(n => !n.read).length}
+                </span>
+              )}
+            </button>
+
+            {showNotifDropdown && (
+              <div 
+                className="absolute left-0 mt-2 w-80 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 overflow-hidden animate-fade-in"
+                dir="rtl"
+                style={{ minWidth: '280px' }}
+              >
+                {/* Header */}
+                <div className="p-3.5 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-800 font-sans flex items-center gap-1.5">
+                    <span>🔔</span> إشعارات وتنبيهات الجلسة المباشرة
+                  </span>
+                  <button
+                    onClick={() => {
+                      setNotifications([]);
+                      setShowNotifDropdown(false);
+                    }}
+                    className="text-[10px] text-slate-400 hover:text-red-500 font-bold"
+                  >
+                    مسح الكل
+                  </button>
+                </div>
+
+                {/* Notifications list */}
+                <div className="max-h-72 overflow-y-auto custom-scrollbar divide-y divide-slate-100">
+                  {notifications.length === 0 ? (
+                    <div className="p-8 text-center text-slate-400 space-y-1.5 flex flex-col items-center">
+                      <Bell size={20} className="text-slate-300 mb-1" />
+                      <p className="text-[11px] font-medium font-sans">الغرفة مستقرة ولا توجد تبليغات حالياً</p>
+                    </div>
+                  ) : (
+                    notifications.map((n) => (
+                      <div
+                        key={n.id}
+                        className={`p-3 text-right transition-colors hover:bg-slate-50/50 flex flex-col gap-1 items-start ${
+                          !n.read ? 'bg-indigo-50/20' : ''
+                        }`}
+                      >
+                        <div className="flex w-full items-center justify-between gap-2.5">
+                          <span className={`text-[10.5px] font-bold font-sans ${
+                            n.type === 'violation' ? 'text-red-650' :
+                            n.type === 'success' ? 'text-emerald-700' :
+                            'text-indigo-700'
+                          }`}>
+                            {n.title}
+                          </span>
+                          <span className="text-[9px] text-slate-400 font-mono">
+                            {new Date(n.timestamp).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </div>
+                        <p className="text-[10.5px] leading-relaxed text-slate-650 font-sans break-words text-right w-full">
+                          {n.message}
+                        </p>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                {/* Footer */}
+                <div className="p-2.5 bg-slate-50 border-t border-slate-150 text-center">
+                  <p className="text-[9px] text-slate-400 font-sans font-medium">نظام تتبع وانضباط الجلسة • بث حي ومباشر</p>
+                </div>
+              </div>
+            )}
+          </div>
+
           <span className="hidden md:inline-flex text-xs bg-slate-50 border border-slate-200 px-3 py-1.5 text-slate-500 rounded-full font-mono font-medium shadow-inner tracking-tight">
             ID: #{challenge.id.substring(challenge.id.length - 6)}
           </span>
@@ -1367,7 +1682,187 @@ export default function RoomPage({
         
         {/* Left Column: Form & Evaluation Area */}
         <div className="lg:col-span-2 space-y-6">
-          
+
+          {/* Active study session real-time user circles & wide interactive Escape radar log */}
+          {!isCompletedChallenge && !timerFinished && (
+            <div className="space-y-6">
+              {/* 1. Live Study Circle Dashboard */}
+              <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-xl space-y-6 relative overflow-hidden">
+                <div className="absolute top-0 left-0 w-32 h-32 bg-emerald-500/5 rounded-full blur-2xl"></div>
+                <div className="absolute bottom-0 right-0 w-32 h-32 bg-blue-500/5 rounded-full blur-2xl"></div>
+                
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+                  <div className="space-y-1">
+                    <h3 className="font-extrabold text-base md:text-lg text-slate-800 font-sans flex items-center gap-2">
+                      <span className="flex h-3 w-3 relative">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+                      </span>
+                      حلقة المذاكرة الفعالة ({challenge.participants.length} طلاب يذاكرون الآن)
+                    </h3>
+                    <p className="text-xs text-slate-500 font-medium font-sans">الطلاب مجتمعون في الغرفة دراسياً بفضل الله. كُن عوناً وعزيمة لزملائك!</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {challenge.participants.map((pId) => {
+                    const participant = users.find((u) => u.id === pId);
+                    const isSelf = pId === currentUser.id;
+                    const statusInfo = getParticipantStatus(pId);
+                    
+                    // Check if this student has any focus violations
+                    const studentViolations = (challenge.focusViolations || []).filter(v => v.userId === pId);
+                    const hasRecentViolation = studentViolations.length > 0;
+                    const latestViolation = studentViolations[studentViolations.length - 1];
+
+                    return (
+                      <div 
+                        key={pId} 
+                        className={`relative overflow-hidden p-4 rounded-2xl border-2 transition-all flex items-start gap-3.5 ${
+                          hasRecentViolation 
+                            ? 'bg-red-50/40 border-red-200 hover:border-red-300' 
+                            : isSelf 
+                              ? 'bg-blue-50/30 border-blue-200 hover:border-blue-300 shadow-sm'
+                              : 'bg-slate-50/70 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                        }`}
+                      >
+                        {participant?.membershipTier === 'gold' && (
+                          <div className="absolute inset-0 bg-gradient-to-r from-amber-500/5 to-yellow-500/5 pointer-events-none vip-shimmer"></div>
+                        )}
+
+                        <div className="relative shrink-0">
+                          <span className="text-xl w-11 h-11 bg-white shadow border border-slate-200 rounded-full flex items-center justify-center overflow-hidden">
+                            {participant?.avatar?.match(/^(http|data:)/) ? (
+                              <img src={participant?.avatar} alt="avatar" className="w-full h-full object-cover rounded-full" />
+                            ) : (
+                              participant?.avatar
+                            )}
+                          </span>
+                          {!hasRecentViolation && (
+                            <span className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 border-2 border-white rounded-full animate-pulse shadow-sm"></span>
+                          )}
+                          {hasRecentViolation && (
+                            <span className="absolute bottom-0 right-0 w-3 h-3 bg-red-500 border-2 border-white rounded-full animate-bounce shadow-sm"></span>
+                          )}
+                        </div>
+
+                        <div className="flex-1 min-w-0 space-y-1.5 text-right">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="font-extrabold text-xs md:text-sm text-slate-850 font-sans truncate">
+                              {participant?.name} {isSelf && <span className="text-blue-600 font-bold">(أنت)</span>}
+                            </span>
+                            {participant?.membershipTier === 'gold' && (
+                              <span className="text-[8px] bg-gradient-to-r from-amber-500 to-yellow-400 text-white border border-amber-300 shadow-sm px-1.5 py-0.5 rounded-full font-bold">
+                                ذهبي 👑
+                              </span>
+                            )}
+                            {participant?.membershipTier === 'silver' && (
+                              <span className="text-[8px] bg-gradient-to-r from-slate-400 to-slate-400 text-white shadow-sm px-1.5 py-0.5 rounded-full font-semibold">
+                                فضي 🥈
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex flex-col text-[10px] text-slate-500 space-y-0.5">
+                              <span>🏆 رصيدك: <strong className="text-slate-700 font-mono font-bold">{participant?.points || 0}ن</strong></span>
+                              <span>🎓 دورات: <strong className="text-indigo-600 font-bold">{participant?.challengesCompleted || 0}</strong></span>
+                            </div>
+
+                            <div className="text-left shrink-0">
+                              {hasRecentViolation ? (
+                                <span className="inline-flex px-2 py-0.5 rounded-full text-[9px] font-sans font-extrabold bg-red-100 text-red-600 border border-red-200">
+                                  ⚠️ غادر الصفحة
+                                </span>
+                              ) : (
+                                <span className="inline-flex px-2 py-0.5 rounded-full text-[9px] font-sans font-bold bg-emerald-150 text-emerald-600 border border-emerald-200/50">
+                                  ⏳ مُركّز ومثابر
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          {hasRecentViolation && (
+                            <p className="text-[9px] text-red-700 bg-red-50 p-2 rounded-xl border border-red-200/20 leading-relaxed text-right mt-1 font-sans">
+                              ⚠️ رصد النظام خروج الطالب مؤخراً من واجهة المذاكرة النشطة (مغادرة الصفحة أو تبديل التبويب).
+                            </p>
+                          )}
+                          {!hasRecentViolation && (
+                            <p className="text-[9px] text-emerald-700 bg-emerald-500/5 p-2 rounded-xl leading-relaxed text-right mt-1 font-sans font-medium">
+                              💪 يحافظ على تركيزه التام داخل الصفحة! ممتاز ومثابر.
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* 2. Professional Focus Discipline Log Dashboard */}
+              <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-md space-y-5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-100 font-sans">
+                  <div className="space-y-0.5">
+                    <h3 className="font-bold text-sm md:text-base text-slate-800 flex items-center gap-2">
+                      <span className="flex h-2.5 w-2.5 relative">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-indigo-500"></span>
+                      </span>
+                      🛡️ لوحة متابعة تركيز وانضباط الجلسة
+                    </h3>
+                    <p className="text-[10px] text-slate-500 font-medium">سجل فوري لمراقبة مغادرة شاشة الدراسة لضمان الجدية والأمانة</p>
+                  </div>
+                  <span className="text-[9px] bg-indigo-50 text-indigo-600 border border-indigo-100 px-3 py-1 rounded-full font-bold">
+                    نظام تتبع التركيز نشط 🛡️
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                  <div className="md:col-span-1 space-y-3 p-4 bg-slate-50 rounded-2xl border border-slate-100/50 flex flex-col justify-between">
+                    <div className="space-y-2">
+                      <span className="text-[10.5px] text-indigo-700 font-bold block">🚨 آلية تتبع الانضباط:</span>
+                      <p className="text-[10px] text-slate-650 leading-relaxed font-sans">
+                        يتطلب هذا التحدي البقاء الكامل في صفحة المذاكرة. أي مغامرة بالخروج من الصفحة أو تصفح تبويبات أخرى تسجل غرامة فورية قدرها 10 نقاط لضمان جدية الجلسة لجميع الزملاء.
+                      </p>
+                    </div>
+                    <div className="bg-amber-500/5 p-2 rounded-xl border border-amber-200/40 text-[9.5px]/relaxed text-amber-800 text-center font-semibold">
+                      يرجى المحافظة على البقاء في هذه الصفحة للحفاظ على رصيد نقاط ثمرتك التعليمية.
+                    </div>
+                  </div>
+
+                  <div className="md:col-span-2 space-y-2">
+                    <div className="text-[10.5px] text-slate-500 font-bold font-sans">📋 سجل التنبيهات الفورية الفعالة:</div>
+                    <div className="space-y-2 max-h-56 overflow-y-auto custom-scrollbar pr-1">
+                      {!challenge.focusViolations || challenge.focusViolations.length === 0 ? (
+                        <div className="p-8 bg-emerald-50/20 border border-emerald-100 rounded-2xl text-center space-y-1.5 h-full flex flex-col items-center justify-center">
+                          <span className="text-2xl">🌱</span>
+                          <p className="text-[11px] text-emerald-800 font-bold">الجميع في أقصى درجات التركيز مَعاً!</p>
+                          <p className="text-[9.5px] text-slate-500 max-w-xs font-sans">لم يتم تسجيل أي خروج من صفحة المذاكرة النشطة حتى الآن. عمل ممتاز!</p>
+                        </div>
+                      ) : (
+                        [...challenge.focusViolations].reverse().map((v, idx) => (
+                          <div key={v.id || idx} className="p-3 bg-red-50/30 border border-red-100/80 rounded-xl text-right flex items-center justify-between gap-3">
+                            <div className="space-y-1">
+                              <p className="text-xs text-slate-800 font-semibold font-sans">
+                                غادر الطالب <span className="text-slate-900 font-bold">{v.userName}</span> واجهة المذاكرة النشطة لبعض الوقت.
+                              </p>
+                              <span className="text-[9px] text-slate-400 block font-mono">
+                                توقيت الحدث: {new Date(v.timestamp).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}
+                              </span>
+                            </div>
+                            <span className="text-[9.5px] bg-red-500/10 text-red-600 border border-red-200/50 font-bold px-2 py-0.5 rounded shrink-0">
+                              -{v.penaltyPoints}ن 📉
+                            </span>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Submission and Grading View */}
           {!isCompletedChallenge && timerFinished && (
             <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xl space-y-4">
@@ -1610,7 +2105,7 @@ export default function RoomPage({
                       <div className="flex justify-between items-center text-xs">
                         <div className="flex items-center gap-2">
                           <span className="text-xl w-6 h-6 bg-slate-50 border-slate-200 rounded-full flex items-center justify-center overflow-hidden">{pUser?.avatar?.match(/^(http|data:)/) ? <img src={pUser?.avatar} alt="avatar" className="w-full h-full object-cover rounded-full" /> : (pUser?.avatar)}</span>
-                          <span className="font-bold text-slate-800 font-sans flex flex-wrap items-center gap-1.5">
+                          <span className="font-bold text-slate-800 font-sans flex flex-wrap items-center gap-1.5 font-sans">
                             {pUser?.name}
                             {pUser?.membershipTier === 'gold' && (
                               <span className="text-[8px] bg-gradient-to-r from-amber-500 to-yellow-400 text-white border border-amber-300 shadow-sm px-1.5 py-0.5 rounded-full font-bold flex items-center gap-0.5 vip-shimmer" title="موثق ذهبي">
@@ -1633,7 +2128,7 @@ export default function RoomPage({
                       </div>
 
                       {pSub && (
-                        <div className="text-xs text-slate-500 font-sans bg-slate-1000 p-3 rounded-lg leading-relaxed relative">
+                        <div className="text-xs text-slate-500 font-sans bg-slate-100/50 p-3 rounded-lg leading-relaxed relative">
                           <p>{pSub.proofText}</p>
                           {pSub.proofFile && (
                             <div className="mt-3 overflow-hidden border border-slate-200 rounded-lg max-h-40 flex justify-center bg-black/40">
@@ -1663,46 +2158,118 @@ export default function RoomPage({
 
         {/* Right Column: Participant list & timings indicator */}
         <div className="lg:col-span-1 space-y-6">
-          <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xl space-y-4">
-            <h3 className="font-bold text-md text-slate-800 font-sans">قائمة الطلاب الحضور ({challenge.participants.length})</h3>
-            
-            <div className="space-y-3 pt-1">
-              {challenge.participants.map((pId) => {
-                const participant = users.find((u) => u.id === pId);
-                const statusInfo = getParticipantStatus(pId);
-                return (
-                  <div key={pId} className="flex items-center justify-between p-3 bg-slate-50 border-slate-200/30 rounded-xl border border-slate-200">
-                    <div className="flex items-center gap-2.5">
-                      <span className="text-lg w-8 h-8 bg-slate-50 border border-slate-200 rounded-full flex items-center justify-center overflow-hidden">
-                        {participant?.avatar?.match(/^(http|data:)/) ? <img src={participant?.avatar} alt="avatar" className="w-full h-full object-cover rounded-full" /> : (participant?.avatar)}
-                      </span>
-                      <div>
-                        <h4 className="font-sans font-bold text-xs text-slate-800 flex flex-wrap items-center gap-1.5">
-                          {participant?.name}
-                          {participant?.membershipTier === 'gold' && (
-                            <span className="text-[8px] bg-gradient-to-r from-amber-500 to-yellow-400 text-white border border-amber-300 shadow-sm px-1.5 py-0.5 rounded-full font-bold flex items-center gap-0.5 vip-shimmer" title="موثق ذهبي">
-                              موثق ذهبي
-                            </span>
-                          )}
-                          {participant?.membershipTier === 'silver' && (
-                             <span className="text-[8px] bg-gradient-to-r from-slate-400 to-slate-400 text-white shadow-sm px-1.5 py-0.5 rounded-full font-bold flex items-center gap-0.5 vip-shimmer" title="موثق فضي">
-                               موثق فضي
-                             </span>
-                          )}
-                        </h4>
-                        <span className="text-[10px] text-slate-500 block">{participant?.email}</span>
+          {timerFinished ? (
+            <>
+              {/* Show original Sidebar cards only when the session timer has ended so the user can easily focus on submission cards on the left */}
+              <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xl space-y-4">
+                <h3 className="font-bold text-md text-slate-800 font-sans">قائمة الطلاب الحضور ({challenge.participants.length})</h3>
+                
+                <div className="space-y-3 pt-1">
+                  {challenge.participants.map((pId) => {
+                    const participant = users.find((u) => u.id === pId);
+                    const statusInfo = getParticipantStatus(pId);
+                    return (
+                      <div key={pId} className="flex items-center justify-between p-3 bg-slate-50 border-slate-200/30 rounded-xl border border-slate-200">
+                        <div className="flex items-center gap-2.5">
+                          <span className="text-lg w-8 h-8 bg-slate-50 border border-slate-200 rounded-full flex items-center justify-center overflow-hidden">
+                            {participant?.avatar?.match(/^(http|data:)/) ? <img src={participant?.avatar} alt="avatar" className="w-full h-full object-cover rounded-full" /> : (participant?.avatar)}
+                          </span>
+                          <div>
+                            <h4 className="font-sans font-bold text-xs text-slate-800 flex flex-wrap items-center gap-1.5">
+                              {participant?.name}
+                              {participant?.membershipTier === 'gold' && (
+                                <span className="text-[8px] bg-gradient-to-r from-amber-500 to-yellow-400 text-white border border-amber-300 shadow-sm px-1.5 py-0.5 rounded-full font-bold flex items-center gap-0.5 vip-shimmer" title="موثق ذهبي">
+                                  موثق ذهبي
+                                </span>
+                              )}
+                              {participant?.membershipTier === 'silver' && (
+                                 <span className="text-[8px] bg-gradient-to-r from-slate-400 to-slate-400 text-white shadow-sm px-1.5 py-0.5 rounded-full font-bold flex items-center gap-0.5 vip-shimmer" title="موثق فضي">
+                                   موثق فضي
+                                 </span>
+                              )}
+                            </h4>
+                            <span className="text-[10px] text-slate-500 block">{participant?.email}</span>
+                          </div>
+                        </div>
+
+                        <span className={`px-2 py-0.5 rounded text-[9px] font-sans font-semibold ${statusInfo.color}`}>
+                          {statusInfo.label}
+                        </span>
                       </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Professional Discipline Tracker Sidebar Panel */}
+              <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xl space-y-4 font-sans">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-bold text-xs md:text-sm text-slate-800 flex items-center gap-1.5 font-sans">
+                    <span>🛡️</span> مراقب تركيز وانضباط الجلسة
+                  </h3>
+                  <span className="text-[9px] bg-indigo-50 text-indigo-600 border border-indigo-100 px-2 py-0.5 rounded-full font-bold">
+                    بث حي نشط 📡
+                  </span>
+                </div>
+                
+                <p className="text-[10px] text-slate-500 leading-relaxed">
+                  لرصد ومتابعة مغادرة شاشة المذاكرة لضمان الجدية والأمانة والمصداقية الكاملة بين الطلاب أثناء ساعات العمل والتركيز.
+                </p>
+
+                <div className="space-y-2 pt-1 max-h-56 overflow-y-auto custom-scrollbar">
+                  {!challenge.focusViolations || challenge.focusViolations.length === 0 ? (
+                    <div className="p-4 bg-emerald-50/20 border border-emerald-100 rounded-xl text-center space-y-1">
+                      <span className="text-xl">🙌</span>
+                      <p className="text-xs text-emerald-700 font-bold">الجميع قيد التركيز التام!</p>
+                      <p className="text-[9px] text-[#2c7a2c]">منصة الدراسة خالية تماماً من أي مخالفات.</p>
                     </div>
+                  ) : (
+                    [...challenge.focusViolations].reverse().map((v, idx) => (
+                      <div key={v.id || idx} className="p-3 bg-red-50/25 border border-red-100 rounded-xl text-right animate-shake">
+                        <div className="flex items-center justify-between text-[11px] font-bold text-slate-800">
+                          <span className="flex items-center gap-1 font-sans">
+                            👥 {v.userName}
+                          </span>
+                          <span className="text-[9.5px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded font-mono font-bold">
+                            -{v.penaltyPoints}ن
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-650 leading-relaxed font-semibold mt-1 font-sans">
+                          غادر واجهة الجلسة أو بدل المتصفح 🚪
+                        </p>
+                        <span className="text-[9px] text-slate-400 block mt-1 text-left font-mono">
+                          {new Date(v.timestamp).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </>
+          ) : (
+            <>
+              {/* Live study encouragement and sidebar focus widget */}
+              <div className="bg-gradient-to-br from-indigo-600 via-purple-700 to-indigo-900 text-white rounded-3xl p-5 shadow-xl relative overflow-hidden space-y-4">
+                <div className="absolute top-0 right-0 w-24 h-24 bg-white/5 rounded-full blur-xl pointer-events-none"></div>
+                <div className="absolute bottom-0 left-0 w-24 h-24 bg-white/5 rounded-full blur-xl pointer-events-none"></div>
+                
+                <h4 className="font-extrabold text-sm flex items-center gap-1.5 text-yellow-300">
+                  <span>💡</span> خيمياء المعرفة والتركيز الحاد
+                </h4>
+                <p className="text-[11px] text-indigo-100 leading-relaxed font-sans font-medium text-right">
+                  "إنما العلم بالتعلم، والشرف بالتقوى والعمل الجاد. لا تجعل بريق إشعارات الجوال يشتت عزمك ويفقدك نقاط ثمرة تركيزك الثمينة." ✨
+                </p>
+                <div className="pt-3 border-t border-indigo-500/30 flex items-center justify-between text-[10px] text-indigo-200">
+                  <span>شحن طاقة الجلسة الشريكة:</span>
+                  <span className="font-extrabold text-white font-mono bg-indigo-950/50 px-2.5 py-0.5 rounded-full">
+                    98% ⚡
+                  </span>
+                </div>
+              </div>
+            </>
+          )}
 
-                    <span className={`px-2 py-0.5 rounded text-[9px] font-sans font-semibold ${statusInfo.color}`}>
-                      {statusInfo.label}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
+          {/* Always show terms and conditions card */}
           <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xl space-y-3.5 text-xs text-slate-500 font-sans leading-relaxed">
             <h4 className="font-bold text-slate-800">شروط تصفية نقاط التحدي</h4>
             <p>1. تحتسب نقاط الجلسة (+{challenge.pointsReward}ن) فوراً وترحل للحساب عند تسليم الإثبات والتقييم.</p>

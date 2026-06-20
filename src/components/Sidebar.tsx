@@ -17,6 +17,7 @@ import {
   Wallet,
   Crown,
   Sparkles,
+  Bell,
 } from "lucide-react";
 
 interface SidebarProps {
@@ -79,6 +80,11 @@ export default function Sidebar({
             icon: <Crown size={18} />,
           },
           {
+            name: "admin-notifications",
+            label: "الإشعارات والتبليغات",
+            icon: <Bell size={18} />,
+          },
+          {
             name: "admin-settings",
             label: "إعدادات المنصة",
             icon: <ShieldAlert size={18} />,
@@ -135,7 +141,7 @@ export default function Sidebar({
         dir="rtl"
       >
         {/* HEADER */}
-        <div className="pt-6 px-6 pb-6 border-b border-slate-200 flex items-center justify-between gap-3 shrink-0">
+        <div className="h-[73px] px-6 border-b border-slate-200 flex items-center justify-between gap-3 shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-[#6C63FF] to-[#FF6584] flex items-center justify-center shadow-lg border border-slate-200 shrink-0 overflow-hidden text-white">
               {settings?.platformLogo ? (
@@ -269,7 +275,7 @@ export default function Sidebar({
                   onNavigate(item.name);
                   onClose?.();
                 }}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all select-none cursor-pointer ${
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-sans font-semibold transition-all select-none cursor-pointer ${
                   isActive
                     ? "bg-blue-50 text-blue-600 font-bold"
                     : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
@@ -307,7 +313,7 @@ export default function Sidebar({
               onLogout();
               onClose?.();
             }}
-            className="w-full flex items-center justify-center gap-2 px-4 py-3.5 text-red-600 bg-red-50 hover:bg-red-600 hover:text-white rounded-xl text-sm font-bold transition-all select-none cursor-pointer duration-200 hover:shadow-lg hover:shadow-red-500/10"
+            className="w-full flex items-center justify-center gap-2 px-4 py-3.5 text-red-600 bg-red-50 hover:bg-red-600 hover:text-white rounded-xl text-sm font-sans font-bold transition-all select-none cursor-pointer duration-200 hover:shadow-lg hover:shadow-red-500/10"
           >
             <LogOut size={18} />
             <span className="font-sans">تسجيل الخروج</span>

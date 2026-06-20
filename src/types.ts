@@ -17,6 +17,7 @@ export interface SubscriptionPlan {
 
 export interface User {
   id: string;
+  studentCode?: string;
   name: string;
   phone?: string;
   parentPhone?: string;
@@ -76,6 +77,14 @@ export interface Challenge {
   pointsReward: number;
   pointsPenalty: number;
   createdAt: number;
+  focusViolations?: {
+    id: string;
+    userId: string;
+    userName: string;
+    platform: string;
+    timestamp: number;
+    penaltyPoints: number;
+  }[];
 }
 
 export interface TransactionRequest {
@@ -119,4 +128,14 @@ export interface Session {
   userId: string;
   loginTime: number;
   token: string;
+}
+
+export interface UserNotification {
+  id: string;
+  userIds: string[]; // List of targeted user/student IDs, or ["all"] for system-wide broadcasts
+  title: string;
+  message: string;
+  type: 'info' | 'success' | 'warning' | 'penalty' | 'admin' | 'violation';
+  timestamp: number;
+  readBy: string[]; // List of user IDs who have marked this notification as read
 }

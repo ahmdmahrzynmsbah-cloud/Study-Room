@@ -62,6 +62,10 @@
     scrollbar-color: #cbd5e1 #f1f5f9;
     min-height: 100vh;
   }
+
+  button, input, select, textarea {
+    font-family: "Cairo", sans-serif !important;
+  }
 }
 
 /* Custom scrollbar for webkit browsers */

@@ -12,6 +12,7 @@ import {
   LogEntry,
   Session,
   TransactionRequest,
+  UserNotification,
 } from "./types";
 import { initializeDB, getDB, saveDB, writeLog, uuid } from "./db";
 
@@ -40,7 +41,23 @@ import {
   Users,
   Menu,
   AlertCircle,
+  Bell,
+  X,
+  CheckCheck,
+  Search,
+  Volume2,
+  VolumeX,
+  Trash2,
+  Calendar,
+  Check,
+  Award,
+  Info,
+  AlertTriangle,
+  Settings,
+  RefreshCw,
 } from "lucide-react";
+
+import { AnimatePresence, motion } from "motion/react";
 
 export default function App() {
   // Primary Application states
@@ -51,6 +68,89 @@ export default function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [transactions, setTransactions] = useState<TransactionRequest[]>([]);
+  const [notifications, setNotifications] = useState<UserNotification[]>([]);
+  const [showNotificationsDropdown, setShowNotificationsDropdown] = useState(false);
+  const [notifSearchQuery, setNotifSearchQuery] = useState("");
+  const [notifSelectedFilter, setNotifSelectedFilter] = useState<'all' | 'unread' | 'important' | 'success'>('all');
+  const [soundEnabled, setSoundEnabled] = useState(true);
+  const [dismissedAdminNotifIds, setDismissedAdminNotifIds] = useState<string[]>([]);
+
+  const playAudioChime = (type: 'info' | 'success' | 'warning' | 'penalty' | 'click' | 'open') => {
+    if (!soundEnabled) return;
+    try {
+      const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      if (ctx.state === 'suspended') {
+        ctx.resume();
+      }
+      const now = ctx.currentTime;
+
+      if (type === 'click') {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(580, now);
+        osc.frequency.exponentialRampToValueAtTime(1100, now + 0.08);
+        gain.gain.setValueAtTime(0.04, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+        osc.start(now);
+        osc.stop(now + 0.08);
+      } else if (type === 'open') {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(440, now);
+        osc.frequency.exponentialRampToValueAtTime(880, now + 0.15);
+        gain.gain.setValueAtTime(0.06, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+        osc.start(now);
+        osc.stop(now + 0.2);
+      } else if (type === 'success') {
+        const notes = [523.25, 659.25, 783.99, 1046.5];
+        notes.forEach((freq, idx) => {
+          const oscNode = ctx.createOscillator();
+          const gainNode = ctx.createGain();
+          oscNode.connect(gainNode);
+          gainNode.connect(ctx.destination);
+          oscNode.type = 'sine';
+          oscNode.frequency.setValueAtTime(freq, now + idx * 0.08);
+          gainNode.gain.setValueAtTime(0.05, now + idx * 0.08);
+          gainNode.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.08 + 0.3);
+          oscNode.start(now + idx * 0.08);
+          oscNode.stop(now + idx * 0.08 + 0.3);
+        });
+      } else if (type === 'penalty' || type === 'warning') {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(220, now);
+        osc.frequency.setValueAtTime(140, now + 0.12);
+        gain.gain.setValueAtTime(0.06, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+        osc.start(now);
+        osc.stop(now + 0.25);
+      } else {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(523.25, now);
+        osc.frequency.exponentialRampToValueAtTime(659.25, now + 0.12);
+        gain.gain.setValueAtTime(0.06, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+        osc.start(now);
+        osc.stop(now + 0.25);
+      }
+    } catch (e) {
+      // AudioContext blocked
+    }
+  };
 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
@@ -147,10 +247,78 @@ export default function App() {
 
   // --- INITIALIZATION ---
   useEffect(() => {
-    import('./lib/firebase').then(({ db }) => {
-      // Now initialize DB from firestore or seed it
-      initializeDB().then(() => {
-        import('firebase/firestore').then(({ doc, onSnapshot }) => {
+    let isMounted = true;
+    const initAndListen = async () => {
+      try {
+        const { db } = await import('./lib/firebase');
+        await initializeDB();
+        if (!isMounted) return;
+        const loadedUsers = (getDB<User[]>("sr_users", []) || []).filter(Boolean);
+        let usersUpdated = false;
+        loadedUsers.forEach(u => {
+          if (!u.studentCode) {
+            u.studentCode = 'SR-' + Math.random().toString(36).substring(2, 8).toUpperCase();
+            usersUpdated = true;
+          }
+        });
+        if (usersUpdated) {
+          saveDB("sr_users", loadedUsers);
+        }
+        const loadedGroups = (getDB<Group[]>("sr_groups", []) || []).filter(Boolean);
+        const loadedChallenges = (getDB<Challenge[]>("sr_challenges", []) || []).filter(Boolean);
+        let loadedSettings = getDB<AppSettings>("sr_settings", {
+          appName: "StudyRoom",
+          defaultReward: 50,
+          defaultPenalty: 20,
+          allowSelfRating: false,
+          maxGroupSize: 20,
+          maintenanceMode: false,
+          pointsToEgpRate: 25,
+          egpToPointsRate: 25,
+        });
+        const loadedSession = getDB<Session | null>("sr_sessions", null);
+        const loadedLogs = getDB<LogEntry[]>("sr_log", []);
+        const loadedTransactions = getDB<TransactionRequest[]>("sr_transactions", []);
+        const loadedNotifications = getDB<UserNotification[]>("sr_notifications", []);
+        setUsers(loadedUsers);
+        setGroups(loadedGroups);
+        setChallenges(loadedChallenges);
+        setSettings(loadedSettings);
+        setSession(loadedSession);
+        setLogs(loadedLogs);
+        setTransactions(loadedTransactions);
+        setNotifications(loadedNotifications);
+        const loadedDismissed = localStorage.getItem('dismissed_admin_notifs');
+        if (loadedDismissed) {
+          try {
+            setDismissedAdminNotifIds(JSON.parse(loadedDismissed));
+          } catch (e) {
+            console.error(e);
+          }
+        }
+        if (loadedSession) {
+          const activeUser = loadedUsers.find((u) => u.id === loadedSession.userId);
+          if (activeUser && activeUser.isActive !== false) {
+            const activeRoom = loadedChallenges.find(
+              (c) => c.status === "active" && c.participants.includes(activeUser.id),
+            );
+            if (activeRoom && activeUser.role !== "admin") {
+              setSelectedChallengeId(activeRoom.id);
+              setActivePage("room");
+            } else {
+              setActivePage(activeUser.role === "admin" ? "admin-dashboard" : "dashboard");
+            }
+          } else {
+            localStorage.removeItem("sr_sessions");
+            setSession(null);
+            setActivePage("login");
+          }
+        } else {
+          setActivePage("login");
+        }
+        setLoading(false);
+        const { doc, onSnapshot } = await import('firebase/firestore');
+
           
           // Listen to Users
                onSnapshot(doc(db, 'app_data', 'sr_users'), (docSnap) => {
@@ -205,66 +373,24 @@ export default function App() {
                     setTransactions(data);
                  }
                }, (err) => console.error("transactions listener error", err));
-             });
-           });
-    });
 
-    // Fetch records into state from cache instantly
-    const loadedUsers = (getDB<User[]>("sr_users", []) || []).filter(Boolean);
-    const loadedGroups = (getDB<Group[]>("sr_groups", []) || []).filter(Boolean);
-    const loadedChallenges = (getDB<Challenge[]>("sr_challenges", []) || []).filter(Boolean);
-
-    let loadedSettings = getDB<AppSettings>("sr_settings", {
-      appName: "StudyRoom",
-      defaultReward: 50,
-      defaultPenalty: 20,
-      allowSelfRating: false,
-      maxGroupSize: 20,
-      maintenanceMode: false,
-      pointsToEgpRate: 25, // 25 points = 1 EGP
-      egpToPointsRate: 25, // 1 EGP = 25 points
-    });
-
-    const loadedSession = getDB<Session | null>("sr_sessions", null);
-    const loadedLogs = getDB<LogEntry[]>("sr_log", []);
-    const loadedTransactions = getDB<TransactionRequest[]>("sr_transactions", []);
-
-    setUsers(loadedUsers);
-    setGroups(loadedGroups);
-    setChallenges(loadedChallenges);
-    setSettings(loadedSettings);
-    setSession(loadedSession);
-    setLogs(loadedLogs);
-    setTransactions(loadedTransactions);
-
-    // Navigation fallback based on session
-    if (loadedSession) {
-      const activeUser = loadedUsers.find((u) => u.id === loadedSession.userId);
-      if (activeUser && activeUser.isActive !== false) {
-        // If there was an active challenge room in memory, keep it
-        const activeRoom = loadedChallenges.find(
-          (c) =>
-            c.status === "active" && c.participants.includes(activeUser.id),
-        );
-        if (activeRoom && activeUser.role !== "admin") {
-          setSelectedChallengeId(activeRoom.id);
-          setActivePage("room");
-        } else {
-          setActivePage(
-            activeUser.role === "admin" ? "admin-dashboard" : "dashboard",
-          );
+               // Listen to Notifications
+               onSnapshot(doc(db, 'app_data', 'sr_notifications'), (docSnap) => {
+                 if (docSnap.exists() && docSnap.data().items) {
+                    const data = docSnap.data().items;
+                    localStorage.setItem('sr_notifications', JSON.stringify(data));
+                    setNotifications(data);
+                 }
+               }, (err) => console.error("notifications listener error", err));
+      } catch (err) {
+        console.error("Firestore loading error:", err);
+        if (isMounted) {
+          setLoading(false);
         }
-      } else {
-        // invalid or deactivated session
-        localStorage.removeItem("sr_sessions");
-        setSession(null);
-        setActivePage("login");
       }
-    } else {
-      setActivePage("login");
-    }
+    };
 
-    setLoading(false);
+    initAndListen();
 
     // Add storage listener to sync state across tabs
     const handleStorageChange = () => {
@@ -273,7 +399,10 @@ export default function App() {
       setSession(getDB<Session | null>("sr_sessions", null));
     };
     window.addEventListener("storage", handleStorageChange);
-    return () => window.removeEventListener("storage", handleStorageChange);
+    return () => {
+      isMounted = false;
+      window.removeEventListener("storage", handleStorageChange);
+    };
   }, []);
 
   // Reactively clear stale or mismatched sessions
@@ -318,6 +447,181 @@ export default function App() {
     setTransactions(newTransactions);
     saveDB("sr_transactions", newTransactions);
   };
+
+  const handleUpdateNotifications = (newNotifications: UserNotification[]) => {
+    setNotifications(newNotifications);
+    saveDB("sr_notifications", newNotifications);
+  };
+
+  // Admin-specific dynamic notifications
+  const getAdminNotificationsList = (): UserNotification[] => {
+    if (!currentUser) return [];
+    
+    const list: UserNotification[] = [];
+
+    // 1. Subscription Alerts
+    users.forEach(u => {
+      if (u.role === 'user' && u.membershipExpiry) {
+        const msLeft = u.membershipExpiry - Date.now();
+        const daysLeft = Math.ceil(msLeft / (1000 * 60 * 60 * 24));
+        
+        const planName = u.membershipTier === 'silver' ? 'الفضية' : u.membershipTier === 'gold' ? 'الذهبية' : 'المميزة';
+        if (daysLeft <= 3 && daysLeft > 0) {
+          const id = `sub-expiring-${u.id}`;
+          if (!dismissedAdminNotifIds.includes(id)) {
+            list.push({
+              id,
+              userIds: ["admin"],
+              title: "اقتراب انتهاء اشتراك طالب",
+              message: `ينتهي اشتراك الطالب ${u.name} (باقة ${planName}) خلال ${daysLeft === 1 ? 'يوم واحد' : daysLeft === 2 ? 'يومين' : `${daysLeft} أيام`}. وننصح بتنبيه الطالب للتجديد.`,
+              type: 'warning',
+              timestamp: u.membershipExpiry - (3 * 24 * 60 * 60 * 1000),
+              readBy: []
+            });
+          }
+        } else if (daysLeft <= 0) {
+          const id = `sub-expired-${u.id}`;
+          if (!dismissedAdminNotifIds.includes(id)) {
+            list.push({
+              id,
+              userIds: ["admin"],
+              title: "انتهاء اشتراك طالب",
+              message: `انتهى اشتراك الطالب ${u.name} (باقة ${planName}) بالفعل. يرجى اتخاذ اللازم بالتعليق أو التمديد.`,
+              type: 'penalty',
+              timestamp: u.membershipExpiry,
+              readBy: []
+            });
+          }
+        }
+      }
+    });
+
+    // 2. Pending Transaction Requests (Deposit/Withdrawal)
+    transactions.forEach(t => {
+      if (t.status === 'pending') {
+        const id = `tx-pending-${t.id}`;
+        if (!dismissedAdminNotifIds.includes(id)) {
+          const typeAr = t.type === 'withdraw' ? 'سحب نقدي' : t.type === 'deposit' ? 'شحن رصيد' : t.type === 'convert_points_to_money' ? 'تحويل نقاط لكاش' : 'تحويل كاش لنقاط';
+          const amount = t.amountMoney ? `${t.amountMoney} جنيه` : `${t.amountPoints} نقطة`;
+          list.push({
+            id,
+            userIds: ["admin"],
+            title: "طلب معاملة معلق بالمحفظة",
+            message: `يرجى مراجعة طلب (${typeAr}) من الطالب ${t.userName} بقيمة ${amount} بانتظار الموافقة.`,
+            type: 'info',
+            timestamp: t.timestamp,
+            readBy: []
+          });
+        }
+      }
+    });
+
+    // 3. Submissions awaiting review from challenges
+    challenges.forEach(c => {
+      c.submissions?.forEach(s => {
+        if (s.status === 'pending' || s.status === 'rejected_pending_admin') {
+          const id = `subm-pending-${c.id}-${s.userId}-${s.submittedAt}`;
+          if (!dismissedAdminNotifIds.includes(id)) {
+            const u = users.find(usr => usr.id === s.userId);
+            const name = u ? u.name : s.userId;
+            list.push({
+              id,
+              userIds: ["admin"],
+              title: "إثبات دراسي معلق",
+              message: `أرسل الطالب ${name} إثبات حضور لمجموعة الدراسة "${c.title}" وبانتظار اعتماد المشرف.`,
+              type: 'success',
+              timestamp: s.submittedAt,
+              readBy: []
+            });
+          }
+        }
+      });
+    });
+
+    return list.sort((a, b) => b.timestamp - a.timestamp);
+  };
+
+  const handleDismissAdminNotif = (notifId: string) => {
+    const updated = [...dismissedAdminNotifIds, notifId];
+    setDismissedAdminNotifIds(updated);
+    localStorage.setItem('dismissed_admin_notifs', JSON.stringify(updated));
+  };
+
+  const handleDismissAllAdminNotifs = () => {
+    const activeIds = getAdminNotificationsList().map(n => n.id);
+    const updated = [...dismissedAdminNotifIds, ...activeIds];
+    setDismissedAdminNotifIds(updated);
+    localStorage.setItem('dismissed_admin_notifs', JSON.stringify(updated));
+  };
+
+  const playModernChime = () => {
+    try {
+      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      
+      const osc1 = audioCtx.createOscillator();
+      const gain1 = audioCtx.createGain();
+      osc1.connect(gain1);
+      gain1.connect(audioCtx.destination);
+      
+      osc1.type = 'sine';
+      osc1.frequency.setValueAtTime(523.25, audioCtx.currentTime); // C5 note
+      gain1.gain.setValueAtTime(0.15, audioCtx.currentTime);
+      gain1.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.4);
+      
+      osc1.start();
+      osc1.stop(audioCtx.currentTime + 0.4);
+
+      setTimeout(() => {
+        try {
+          const osc2 = audioCtx.createOscillator();
+          const gain2 = audioCtx.createGain();
+          osc2.connect(gain2);
+          gain2.connect(audioCtx.destination);
+          
+          osc2.type = 'sine';
+          osc2.frequency.setValueAtTime(659.25, audioCtx.currentTime); // E5 note
+          gain2.gain.setValueAtTime(0.15, audioCtx.currentTime);
+          gain2.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.5);
+          
+          osc2.start();
+          osc2.stop(audioCtx.currentTime + 0.5);
+        } catch (e) {
+          console.warn("Audio Context second note error", e);
+        }
+      }, 120);
+
+    } catch (err) {
+      console.warn("Audio context not supported", err);
+    }
+  };
+
+  const lastProcessedNotificationIdRef = React.useRef<string | null>(null);
+  
+  useEffect(() => {
+    const currentUserId = session?.userId;
+    if (!currentUserId || notifications.length === 0) return;
+    const activeUser = users.find(u => u.id === currentUserId);
+    if (!activeUser) return;
+    
+    const myNotifications = notifications.filter(
+      (n) => n.userIds.includes("all") || n.userIds.includes(activeUser.id)
+    );
+    if (myNotifications.length === 0) return;
+
+    const unread = myNotifications.filter((n) => !n.readBy.includes(activeUser.id));
+    
+    // Sort by timestamp descending
+    const newestUnread = [...unread].sort((a, b) => b.timestamp - a.timestamp)[0];
+    if (!newestUnread) return;
+
+    if (lastProcessedNotificationIdRef.current !== newestUnread.id) {
+      const isRecent = Date.now() - newestUnread.timestamp < 10000; // sent in last 10s
+      if (isRecent) {
+        playModernChime();
+      }
+      lastProcessedNotificationIdRef.current = newestUnread.id;
+    }
+  }, [notifications, users, session]);
 
   const handleAddLog = (action: string, details: string) => {
     if (!session) return;
@@ -451,6 +755,7 @@ export default function App() {
     // Create custom user
     const newUser: User = {
       id: uuid(),
+      studentCode: 'SR-' + Math.random().toString(36).substring(2, 8).toUpperCase(),
       name: regName.trim(),
       email: emailNorm,
       phone: regPhone.trim(),
@@ -1197,47 +1502,89 @@ export default function App() {
       ) : (
         /* CORE APPLICATION LAYOUT (With Navigation Sidebar) */
         <>
-          {/* Mobile Top Bar */}
-          <header className="md:hidden flex items-center justify-between p-4 bg-white border-b border-slate-200 sticky top-0 z-30 w-full">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-[#6C63FF] to-[#FF6584] flex items-center justify-center text-sm shadow-md border border-slate-200 shrink-0 overflow-hidden">
-                {settings?.platformLogo ? (
-                  <img
-                    src={settings.platformLogo}
-                    alt="Logo"
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  "📚"
-                )}
-              </div>
-              <h1 className="text-lg font-black text-slate-800 font-sans tracking-tight">
-                {settings?.appName || (
-                  <>
-                    STUDY<span className="text-blue-600">ROOM</span>
-                  </>
-                )}
-              </h1>
-            </div>
-            <button
-              onClick={() => setIsMobileMenuOpen(true)}
-              className="p-2 text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
-            >
-              <Menu size={24} />
-            </button>
-          </header>
-
           <Sidebar
             currentUser={currentUser}
             activePage={activePage}
-            onNavigate={handleNavigate}
+            onNavigate={(p) => {
+              handleNavigate(p);
+              setShowNotificationsDropdown(false);
+            }}
             onLogout={handleLogout}
             settings={settings!}
             isOpen={isMobileMenuOpen}
             onClose={() => setIsMobileMenuOpen(false)}
           />
 
-          <main className="flex-1 p-6 md:p-8 max-w-7xl mx-auto w-full transition-all overflow-y-auto">
+          <div className="flex-1 flex flex-col min-h-screen overflow-hidden">
+            {/* Unified Global Header Bar */}
+            <header className="bg-white border-b border-slate-200/60 px-6 h-[73px] sticky top-0 z-30 flex items-center justify-between shadow-sm select-none shrink-0">
+              <div className="flex items-center gap-3">
+                {/* Mobile hamburger menu toggle */}
+                <button
+                  onClick={() => setIsMobileMenuOpen(true)}
+                  className="md:hidden p-2 text-slate-500 hover:text-blue-600 hover:bg-slate-50 border border-slate-200/50 rounded-xl transition-all cursor-pointer inline-flex items-center justify-center"
+                >
+                  <Menu size={20} />
+                </button>
+                <div>
+                  <h1 className="text-sm md:text-base font-black text-slate-800 font-sans tracking-tight leading-none">
+                    {(() => {
+                      if (activePage.startsWith("admin")) return "لوحة تحكم الأستاذ المشرف 🛡️";
+                      switch (activePage) {
+                        case "dashboard": return "لوحة المتابعة الشخصية 📊";
+                        case "groups": return "مجموعات التميز والدراسة 🧩";
+                        case "group-detail": return "تفاصيل مجموعة المذاكرة 👥";
+                        case "challenges": return "تحديات التركيز وساحات المنافسة 🎯";
+                        case "leaderboard": return "قائمة صدارة المتفوقين 🏆";
+                        case "profile": return "الملف الشخصي والدراسي ⚙️";
+                        case "copilot": return "المساعد الذكي وطبيب المذاكرة 🤖";
+                        case "room": return "غرفة التركيز والسباق النشط ⚡";
+                        default: return "ساحة التعلم الذكي";
+                      }
+                    })()}
+                  </h1>
+                  <p className="hidden sm:block text-[10px] md:text-[11px] text-slate-400 font-semibold font-sans mt-1">
+                    مرحباً بك، {currentUser?.name} 👋
+                  </p>
+                </div>
+              </div>
+
+              {/* Header Actions (Logo & Bell dropdown) */}
+              <div className="flex items-center gap-3">
+                {/* Bell notification button & dropdown */}
+                <div>
+                  <button
+                    onClick={() => {
+                      setShowNotificationsDropdown(true);
+                      playAudioChime('open');
+                    }}
+                    className="relative p-2.5 bg-slate-50 border border-slate-200 hover:bg-blue-50/80 hover:text-blue-600 rounded-xl transition-all duration-200 cursor-pointer flex items-center justify-center text-slate-600 shadow-sm hover:scale-105 active:scale-95"
+                    title="لوحة التنبيهات الذكية"
+                  >
+                    {(() => {
+                      if (!currentUser) return <Bell size={18} />;
+                      const count = currentUser.role === "admin"
+                        ? getAdminNotificationsList().length
+                        : notifications.filter(n => (n.userIds.includes("all") || n.userIds.includes(currentUser.id)) && !n.readBy.includes(currentUser.id)).length;
+                      
+                      const hasUnread = count > 0;
+                      return (
+                        <>
+                          <Bell size={18} className={hasUnread ? "animate-bounce text-blue-600" : ""} />
+                          {hasUnread && (
+                            <span className="absolute -top-1.5 -left-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-[10px] font-black text-white ring-2 ring-white shadow-md animate-pulse">
+                              {count}
+                            </span>
+                          )}
+                        </>
+                      );
+                    })()}
+                  </button>
+                </div>
+              </div>
+            </header>
+
+            <main className="flex-1 p-6 md:p-8 max-w-7xl mx-auto w-full transition-all overflow-y-auto">
             {activePage === "dashboard" && (
               <DashboardPage
                 currentUser={currentUser!}
@@ -1409,11 +1756,13 @@ export default function App() {
                   settings={settings!}
                   logs={logs}
                   transactions={transactions}
+                  notifications={notifications}
                   onUpdateUsers={handleUpdateUsers}
                   onUpdateGroups={handleUpdateGroups}
                   onUpdateChallenges={handleUpdateChallenges}
                   onUpdateSettings={handleUpdateSettings}
                   onUpdateTransactions={handleUpdateTransactions}
+                  onUpdateNotifications={handleUpdateNotifications}
                   onAddLog={handleAddLog}
                   onNavigate={handleNavigate}
                   onSelectGroup={setSelectedGroupId}
@@ -1421,7 +1770,8 @@ export default function App() {
                 />
               )}
           </main>
-        </>
+        </div>
+      </>
       )}
 
       {/* --- ALL APP DIALOGS (PORTALS) --- */}
@@ -1627,6 +1977,423 @@ export default function App() {
           </div>
         </div>
       )}
+
+        {/* 2. LUXURIOUS SIDE NOTIFICATIONS DRAWER */}
+      <AnimatePresence>
+        {showNotificationsDropdown && currentUser && (() => {
+          const isUserAdmin = currentUser.role === 'admin';
+          const baseList = isUserAdmin 
+            ? getAdminNotificationsList() 
+            : notifications.filter(n => n.userIds.includes("all") || n.userIds.includes(currentUser.id));
+
+          const unreadCount = isUserAdmin 
+            ? baseList.length 
+            : notifications.filter(n => (n.userIds.includes("all") || n.userIds.includes(currentUser.id)) && !n.readBy.includes(currentUser.id)).length;
+
+          const displayList = baseList
+            .filter(n => {
+              if (notifSearchQuery.trim()) {
+                const q = notifSearchQuery.toLowerCase();
+                return n.title.toLowerCase().includes(q) || n.message.toLowerCase().includes(q);
+              }
+              return true;
+            })
+            .filter(n => {
+              if (notifSelectedFilter === 'unread') {
+                return isUserAdmin ? true : !n.readBy.includes(currentUser.id);
+              }
+              if (notifSelectedFilter === 'important') return n.type === 'penalty' || n.type === 'violation' || n.type === 'warning';
+              if (notifSelectedFilter === 'success') return n.type === 'success' || n.type === 'admin';
+              return true;
+            });
+
+          return (
+            <>
+              {/* Backdrop blur overlay */}
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => {
+                  setShowNotificationsDropdown(false);
+                  playAudioChime('click');
+                }}
+                className="fixed inset-0 bg-slate-950/60 backdrop-blur-md z-[110] cursor-pointer"
+              />
+
+              {/* Slide-over Drawer Panel */}
+              <motion.div
+                initial={{ x: "-100%" }}
+                animate={{ x: 0 }}
+                exit={{ x: "-100%" }}
+                transition={{ type: "spring", damping: 28, stiffness: 240 }}
+                className="fixed inset-y-0 left-0 w-full sm:max-w-md bg-white border-r border-slate-200/80 shadow-2xl z-[120] flex flex-col h-full overflow-hidden"
+                dir="rtl"
+              >
+                {/* Drawer Header */}
+                <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50 shrink-0 select-none">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-blue-500 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-blue-500/15">
+                      <Bell size={20} className="animate-pulse" />
+                    </div>
+                    <div>
+                      <h3 className="font-extrabold text-slate-900 text-sm font-sans tracking-tight">
+                        {isUserAdmin ? "لوحة المتابعة الإدارية والإنذارات" : "لوحة التنبيهات والتحذيرات"}
+                      </h3>
+                      <p className="text-[10px] text-slate-400 font-semibold font-sans mt-0.5">
+                        {isUserAdmin ? "الاشتراكات المنتهية، المعاملات المعلقة، تقييمات الطلاب" : "الإعلانات الرسمية وتقارير السلوك والمكافآت"}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    {/* Sound setting switcher */}
+                    <button
+                      onClick={() => {
+                        setSoundEnabled(!soundEnabled);
+                        if (!soundEnabled) {
+                          try {
+                            const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+                            const osc = ctx.createOscillator();
+                            const gain = ctx.createGain();
+                            osc.connect(gain);
+                            gain.connect(ctx.destination);
+                            osc.frequency.setValueAtTime(880, ctx.currentTime);
+                            gain.gain.setValueAtTime(0.04, ctx.currentTime);
+                            gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.1);
+                            osc.start();
+                            osc.stop(ctx.currentTime + 0.1);
+                          } catch (e) {}
+                        }
+                      }}
+                      className={`p-2 rounded-xl border transition-all duration-250 cursor-pointer ${
+                        soundEnabled 
+                          ? "bg-emerald-50 text-emerald-600 border-emerald-100/80 hover:bg-emerald-100" 
+                          : "bg-slate-50 text-slate-400 border-slate-200/60 hover:bg-slate-100"
+                      }`}
+                      title={soundEnabled ? "كتم المؤثرات الصوتية" : "تفعيل المؤثرات الصوتية"}
+                    >
+                      {soundEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        setShowNotificationsDropdown(false);
+                        playAudioChime('click');
+                      }}
+                      className="p-2 bg-slate-50 border border-slate-200/60 text-slate-400 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition-all duration-200 cursor-pointer flex items-center justify-center"
+                    >
+                      <X size={16} />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Advanced Search & Filter Controls */}
+                <div className="p-4 border-b border-slate-100 bg-white space-y-3 shrink-0 select-none">
+                  {/* Search Bar */}
+                  <div className="relative">
+                    <span className="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none text-slate-400">
+                      <Search size={15} />
+                    </span>
+                    <input
+                      type="text"
+                      value={notifSearchQuery}
+                      onChange={(e) => setNotifSearchQuery(e.target.value)}
+                      placeholder={isUserAdmin ? "ابحث ببيانات الطالب أو نوع التنبيه المعلق..." : "ابحث عن إشعار أو قرار معين..."}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl pr-10 pl-3.5 py-2.5 text-xs text-slate-800 focus:bg-white focus:ring-2 focus:ring-blue-100 focus:border-blue-500 outline-none transition-all placeholder:text-slate-400"
+                    />
+                    {notifSearchQuery && (
+                      <button
+                        onClick={() => setNotifSearchQuery("")}
+                        className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 hover:text-slate-600"
+                      >
+                        <X size={14} />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Styled Filter Tabs */}
+                  <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+                    {[
+                      { key: 'all' as const, label: 'الكل' },
+                      { key: 'unread' as const, label: isUserAdmin ? 'معلقة ومطلوبة' : 'غير مقروء', count: unreadCount },
+                      { key: 'success' as const, label: isUserAdmin ? 'جولات إثبات' : 'مكافآت وتكريمات' },
+                      { key: 'important' as const, label: isUserAdmin ? 'قرب انتهاء اشتراكات' : 'تنبيهات انضباطية' },
+                    ].map((tab) => {
+                      const isActive = notifSelectedFilter === tab.key;
+                      return (
+                        <button
+                          key={tab.key}
+                          onClick={() => {
+                            setNotifSelectedFilter(tab.key);
+                            playAudioChime('click');
+                          }}
+                          className={`px-3 py-1.5 rounded-lg text-[11px] font-bold font-sans transition-all duration-200 whitespace-nowrap cursor-pointer flex items-center gap-1 border-b-2 ${
+                            isActive
+                              ? "bg-blue-50 text-blue-600 border-blue-500 font-extrabold"
+                              : "bg-slate-50/50 text-slate-500 border-transparent hover:bg-slate-100 hover:text-slate-800"
+                          }`}
+                        >
+                          <span>{tab.label}</span>
+                          {tab.count !== undefined && tab.count > 0 && (
+                            <span className="bg-red-500 text-white text-[9px] px-1.5 py-0.5 rounded-full font-black animate-pulse">
+                              {tab.count}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Quick actions row */}
+                  <div className="flex items-center justify-between text-[11px] font-sans">
+                    <div className="text-slate-400">
+                      أنت ترى{" "}
+                      <span className="font-bold text-slate-700">
+                        {displayList.length}
+                      </span>{" "}
+                      إشعاراً
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      {/* Read All / Dismiss All */}
+                      {isUserAdmin ? (
+                        displayList.length > 0 && (
+                          <button
+                            onClick={() => {
+                              handleDismissAllAdminNotifs();
+                              playAudioChime('success');
+                            }}
+                            className="text-blue-600 hover:text-blue-800 font-extrabold flex items-center gap-1 cursor-pointer hover:underline"
+                          >
+                            <CheckCheck size={13} />
+                            استبعاد الكل للمشرف
+                          </button>
+                        )
+                      ) : (
+                        displayList.filter(n => !n.readBy.includes(currentUser.id)).length > 0 && (
+                          <button
+                            onClick={() => {
+                              const updated = notifications.map(n => {
+                                if ((n.userIds.includes("all") || n.userIds.includes(currentUser.id)) && !n.readBy.includes(currentUser.id)) {
+                                  return { ...n, readBy: [...n.readBy, currentUser.id] };
+                                }
+                                return n;
+                              });
+                              handleUpdateNotifications(updated);
+                              playAudioChime('success');
+                            }}
+                            className="text-blue-600 hover:text-blue-800 font-extrabold flex items-center gap-1 cursor-pointer hover:underline"
+                          >
+                            <CheckCheck size={13} />
+                            تحديد الكل كمقروء
+                          </button>
+                        )
+                      )}
+
+                      {/* Admin Clear all logs if they want to manage student notifications database */}
+                      {currentUser.role === 'admin' && notifications.length > 0 && (
+                        <button
+                          onClick={() => {
+                            setConfirmModal({
+                              isOpen: true,
+                              message: "هل أنت متأكد من رغبتك في حذف وإعادة تهيئة كافة التنبيهات المسجلة للطلاب بالكامل؟",
+                              onConfirm: () => {
+                                handleUpdateNotifications([]);
+                                setConfirmModal(null);
+                                playAudioChime('penalty');
+                              }
+                            });
+                          }}
+                          className="text-red-500 hover:text-red-700 font-bold flex items-center gap-1 cursor-pointer hover:underline"
+                        >
+                          <Trash2 size={13} />
+                          تصفير قاعدة إشعارات الطلاب
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Structured Inner Lists */}
+                <div className="flex-1 overflow-y-auto p-4 space-y-3.5 bg-slate-50/50">
+                  {displayList.length === 0 ? (
+                    <div className="p-12 text-center text-slate-400 space-y-4 max-w-sm mx-auto select-none mt-10">
+                      <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center mx-auto text-slate-300">
+                        <Bell size={28} />
+                      </div>
+                      <div className="space-y-1.5">
+                        <h4 className="font-extrabold text-slate-800 text-sm font-sans">
+                          {isUserAdmin ? "لوحة الإخطارات والمتابعة مستقرة!" : "سجل الإشعارات فارغ تماماً"}
+                        </h4>
+                        <p className="text-[10px] text-slate-500 font-sans leading-relaxed">
+                          {isUserAdmin 
+                            ? "لا توجد معاملات مالية معلقة، إثباتات حضور تطلب المراجعة، أو اشتراكات طلاب منتهية حالياً للتبويب المختار."
+                            : "لا تتوفر حالياً عقوبات أو مكافآت أو إعلانات رئيسية توافق الفلتر المحدد."}
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    displayList.map((alert) => {
+                      const isRead = isUserAdmin ? false : alert.readBy.includes(currentUser.id);
+                      
+                      // Style config for notifications card
+                      let cardBorder = "border-slate-100";
+                      let glowBorder = "hover:border-slate-200";
+                      let iconBg = "bg-slate-100 text-slate-600";
+                      let tagText = "إجراء إداري معلق";
+                      let tagBg = "bg-slate-100 text-slate-600";
+                      let alertIcon = <Info size={18} />;
+
+                      if (alert.type === 'violation' || alert.type === 'penalty') {
+                        cardBorder = "border-rose-400 shadow-sm";
+                        glowBorder = "hover:border-rose-500 hover:shadow-rose-100/50";
+                        iconBg = "bg-rose-500 text-white";
+                        tagText = "اشتراك منتهي";
+                        tagBg = "bg-rose-50 text-rose-600 border border-rose-100";
+                        alertIcon = <ShieldAlert size={18} />;
+                      } else if (alert.type === 'success') {
+                        cardBorder = "border-emerald-400 shadow-sm";
+                        glowBorder = "hover:border-emerald-500 hover:shadow-emerald-100/50";
+                        iconBg = "bg-emerald-500 text-white";
+                        tagText = "إثبات ينتظر المراجعة";
+                        tagBg = "bg-emerald-50 text-emerald-600 border border-emerald-100";
+                        alertIcon = <Award size={18} />;
+                      } else if (alert.type === 'warning') {
+                        cardBorder = "border-amber-400 shadow-sm";
+                        glowBorder = "hover:border-amber-500 hover:shadow-amber-100/50";
+                        iconBg = "bg-amber-500 text-white";
+                        tagText = "اشتراك ينتهي قريباً";
+                        tagBg = "bg-amber-50 text-amber-600 border border-amber-100";
+                        alertIcon = <AlertTriangle size={18} />;
+                      } else if (alert.type === 'admin') {
+                        cardBorder = "border-indigo-400 shadow-sm";
+                        glowBorder = "hover:border-indigo-500 hover:shadow-indigo-100/50";
+                        iconBg = "bg-indigo-500 text-white";
+                        tagText = "قرار رسمي إداري";
+                        tagBg = "bg-indigo-50 text-indigo-600 border border-indigo-100";
+                        alertIcon = <Sparkles size={18} />;
+                      } else if (alert.type === 'info') {
+                        cardBorder = "border-blue-400 shadow-sm";
+                        glowBorder = "hover:border-blue-500 hover:shadow-blue-100/50";
+                        iconBg = "bg-blue-500 text-white";
+                        tagText = "معاملة بالمحفظة";
+                        tagBg = "bg-blue-50 text-blue-600 border border-blue-100";
+                        alertIcon = <Info size={18} />;
+                      }
+
+                      return (
+                        <motion.div
+                          layout
+                          initial={{ opacity: 0, scale: 0.95 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          exit={{ opacity: 0, scale: 0.95 }}
+                          key={alert.id}
+                          onClick={() => {
+                            if (isUserAdmin) {
+                              handleDismissAdminNotif(alert.id);
+                              playAudioChime('success');
+                            } else {
+                              if (!isRead) {
+                                const updated = notifications.map(n => {
+                                  if (n.id === alert.id) {
+                                    return { ...n, readBy: [...n.readBy, currentUser.id] };
+                                  }
+                                  return n;
+                                });
+                                handleUpdateNotifications(updated);
+                                playAudioChime(alert.type === 'success' ? 'success' : (alert.type === 'penalty' || alert.type === 'violation' ? 'penalty' : 'click'));
+                              } else {
+                                const updated = notifications.map(n => {
+                                  if (n.id === alert.id) {
+                                    return { ...n, readBy: n.readBy.filter(id => id !== currentUser.id) };
+                                  }
+                                  return n;
+                                });
+                                handleUpdateNotifications(updated);
+                                playAudioChime('click');
+                              }
+                            }
+                          }}
+                          className={`group bg-white rounded-2xl border bg-white rounded-2xl border-2 p-4 transition-all duration-300 shadow-sm cursor-pointer relative overflow-hidden ${cardBorder} ${glowBorder}`}
+                        >
+                          {!isRead && !isUserAdmin && (
+                            <span className="absolute top-0 left-0 w-2.5 h-full bg-blue-500 animate-pulse"></span>
+                          )}
+
+                          <div className="flex gap-3 items-start">
+                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 shadow-sm ${isRead ? 'bg-slate-50 opacity-60 text-slate-400' : iconBg}`}>
+                              {alertIcon}
+                            </div>
+
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center justify-between gap-2">
+                                <span className={`px-2 py-0.5 rounded-md text-[9px] font-bold font-sans ${tagBg}`}>
+                                  {tagText}
+                                </span>
+
+                                <span className="text-[9px] text-slate-400 font-mono flex items-center gap-1 shrink-0">
+                                  <Calendar size={10} />
+                                  {new Date(alert.timestamp).toLocaleDateString('ar-EG', {
+                                    month: 'short',
+                                    day: 'numeric',
+                                    hour: '2-digit',
+                                    minute: '2-digit'
+                                  })}
+                                </span>
+                              </div>
+
+                              <h4 className={`text-[12px] font-black font-sans leading-tight mt-1.5 transition-colors ${
+                                isRead ? "text-slate-500 line-through decoration-slate-300" : "text-slate-800 font-extrabold"
+                              }`}>
+                                {alert.title}
+                              </h4>
+
+                              <p className="text-[11px] text-slate-500 font-sans mt-1 leading-relaxed whitespace-pre-wrap break-words">
+                                {alert.message}
+                              </p>
+
+                              <div className="mt-2.5 pt-2.5 border-t border-slate-100 flex items-center justify-between text-[10px] text-slate-400 font-sans select-none">
+                                {isUserAdmin ? (
+                                  <span className="flex items-center gap-1 text-emerald-600 font-black animate-pulse">
+                                    <Check size={12} className="text-emerald-500" />
+                                    مشرف: انقر للاستبعاد والإخفاء
+                                  </span>
+                                ) : isRead ? (
+                                  <span className="flex items-center gap-1 text-slate-400">
+                                    <CheckCheck size={12} className="text-slate-400" />
+                                    قرأتها بالفعل
+                                  </span>
+                                ) : (
+                                  <span className="flex items-center gap-1 text-blue-500 font-bold animate-pulse">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+                                    انقر للمزامنة والقراءة
+                                  </span>
+                                )}
+
+                                <span className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 text-blue-500 hover:underline">
+                                  {isUserAdmin ? "استبعاد الإخطار" : isRead ? "تحديد كغير مقروءة" : "تحديد كمقروءة"}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        </motion.div>
+                      );
+                    })
+                  )}
+                </div>
+
+                {/* Drawer Footer Status line */}
+                <div className="p-3 bg-slate-50 border-t border-slate-100 text-center select-none shrink-0 font-sans">
+                  <span className="text-[10px] font-semibold text-slate-400">
+                    لوحة التنبيهات الموحدة لبيئة التعلم المتكاملة • StudyRoom
+                  </span>
+                </div>
+              </motion.div>
+            </>
+          );
+        })()}
+      </AnimatePresence>
 
       {/* WELCOME MODAL */}
       <WelcomeModal

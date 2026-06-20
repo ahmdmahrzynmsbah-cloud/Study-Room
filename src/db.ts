@@ -72,22 +72,48 @@ export const initializeDB = async (): Promise<void> => {
     const userDoc = await getDoc(doc(db, 'app_data', 'sr_users'));
     if (!userDoc.exists()) {
       saveDB('sr_users', seedUsers);
+    } else {
+      localStorage.setItem('sr_users', JSON.stringify(userDoc.data().items || []));
     }
+
     const groupDoc = await getDoc(doc(db, 'app_data', 'sr_groups'));
     if (!groupDoc.exists()) {
       saveDB('sr_groups', seedGroups);
+    } else {
+      localStorage.setItem('sr_groups', JSON.stringify(groupDoc.data().items || []));
     }
+
     const challengeDoc = await getDoc(doc(db, 'app_data', 'sr_challenges'));
     if (!challengeDoc.exists()) {
       saveDB('sr_challenges', seedChallenges);
+    } else {
+      localStorage.setItem('sr_challenges', JSON.stringify(challengeDoc.data().items || []));
     }
+
     const settingDoc = await getDoc(doc(db, 'app_data', 'sr_settings'));
     if (!settingDoc.exists()) {
       saveDB('sr_settings', defaultSettings);
+    } else {
+      localStorage.setItem('sr_settings', JSON.stringify(settingDoc.data().items || defaultSettings));
     }
+
     const logDoc = await getDoc(doc(db, 'app_data', 'sr_log'));
     if (!logDoc.exists()) {
       saveDB('sr_log', initialLog);
+    } else {
+      localStorage.setItem('sr_log', JSON.stringify(logDoc.data().items || []));
+    }
+
+    const notificationDoc = await getDoc(doc(db, 'app_data', 'sr_notifications'));
+    if (!notificationDoc.exists()) {
+      saveDB('sr_notifications', []);
+    } else {
+      localStorage.setItem('sr_notifications', JSON.stringify(notificationDoc.data().items || []));
+    }
+
+    const txDoc = await getDoc(doc(db, 'app_data', 'sr_transactions'));
+    if (txDoc.exists()) {
+      localStorage.setItem('sr_transactions', JSON.stringify(txDoc.data().items || []));
     }
   } catch (error) {
     console.error("Firestore initialization error:", error);
