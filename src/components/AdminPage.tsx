@@ -27,6 +27,7 @@ import {
   Check,
   X,
   Shield,
+  Search,
   Plus,
   RotateCcw,
   AlertCircle,
