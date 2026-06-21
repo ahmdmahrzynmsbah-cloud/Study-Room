@@ -7,9 +7,10 @@ interface WelcomeModalProps {
   isOpen: boolean;
   onClose: () => void;
   userName: string;
+  welcomeMessage?: string;
 }
 
-export default function WelcomeModal({ isOpen, onClose, userName }: WelcomeModalProps) {
+export default function WelcomeModal({ isOpen, onClose, userName, welcomeMessage }: WelcomeModalProps) {
   const { width, height } = useWindowSize();
   const [showConfetti, setShowConfetti] = useState(false);
 
@@ -69,7 +70,7 @@ export default function WelcomeModal({ isOpen, onClose, userName }: WelcomeModal
         </h2>
         
         <p className="text-slate-600 mb-6 font-sans">
-          سعداء بانضمامك لمنصة رياح التفوق. لقد تم إيداع مكافأة الترحيب في حسابك!
+          {welcomeMessage || "سعداء بانضمامك لمنصة رياح التفوق. لقد تم إيداع مكافأة الترحيب في حسابك!"}
         </p>
 
         <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-100 rounded-2xl w-full p-4 mb-8 transform transition-transform hover:scale-105">

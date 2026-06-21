@@ -114,6 +114,7 @@ export interface AppSettings {
   platformLogo?: string; // App Logo base64
   loginWelcomeTitle?: string;
   loginWelcomeSubtitle?: string;
+  welcomeMessage?: string;
   defaultReward: number;
   defaultPenalty: number;
   allowSelfRating: boolean;

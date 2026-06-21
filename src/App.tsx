@@ -297,6 +297,7 @@ export default function App() {
           maintenanceMode: false,
           pointsToEgpRate: 25,
           egpToPointsRate: 25,
+          welcomeMessage: "سعداء بانضمامك لمنصة رياح التفوق. لقد تم إيداع مكافأة الترحيب في حسابك!",
         });
         const loadedSession = getDB<Session | null>("sr_sessions", null);
         const loadedLogs = getDB<LogEntry[]>("sr_log", []);
@@ -1548,27 +1549,6 @@ export default function App() {
                 >
                   <Menu size={20} />
                 </button>
-                <div>
-                  <h1 className="text-sm md:text-base font-black text-slate-800 font-sans tracking-tight leading-none">
-                    {(() => {
-                      if (activePage.startsWith("admin")) return "لوحة تحكم الأستاذ المشرف 🛡️";
-                      switch (activePage) {
-                        case "dashboard": return "لوحة المتابعة الشخصية 📊";
-                        case "groups": return "مجموعات التميز والدراسة 🧩";
-                        case "group-detail": return "تفاصيل مجموعة المذاكرة 👥";
-                        case "challenges": return "تحديات التركيز وساحات المنافسة 🎯";
-                        case "leaderboard": return "قائمة صدارة المتفوقين 🏆";
-                        case "profile": return "الملف الشخصي والدراسي ⚙️";
-                        case "copilot": return "المساعد الذكي وطبيب المذاكرة 🤖";
-                        case "room": return "غرفة التركيز والسباق النشط ⚡";
-                        default: return "ساحة التعلم الذكي";
-                      }
-                    })()}
-                  </h1>
-                  <p className="hidden sm:block text-[10px] md:text-[11px] text-slate-400 font-semibold font-sans mt-1">
-                    مرحباً بك، {currentUser?.name} 👋
-                  </p>
-                </div>
               </div>
 
               {/* Header Actions (Logo & Bell dropdown) */}
@@ -2422,6 +2402,7 @@ export default function App() {
         isOpen={showWelcomeModal}
         onClose={() => setShowWelcomeModal(false)}
         userName={registeredUserName}
+        welcomeMessage={settings?.welcomeMessage}
       />
     </div>
   );

@@ -2565,6 +2565,23 @@ export default function AdminPage({
                   />
                 </div>
 
+                <div>
+                  <label className="block text-[11px] text-slate-500 font-sans mb-1.5">
+                    رسالة الترحيب بعد التسجيل والمكافأة
+                  </label>
+                  <textarea
+                    value={localSettings.welcomeMessage || ""}
+                    placeholder="سعداء بانضمامك لمنصة رياح التفوق. لقد تم إيداع مكافأة الترحيب في حسابك!"
+                    onChange={(e) =>
+                      setLocalSettings({
+                        ...localSettings,
+                        welcomeMessage: e.target.value,
+                      })
+                    }
+                    className="w-full text-xs font-sans bg-slate-50 border-slate-200 border border-slate-200 rounded-xl px-3 py-2.5 text-slate-800 resize-none h-16"
+                  />
+                </div>
+
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-[11px] text-slate-500 font-sans mb-1.5">
